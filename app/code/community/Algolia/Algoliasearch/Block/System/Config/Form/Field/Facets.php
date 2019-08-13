@@ -1,51 +1,92 @@
 <?php
 
 /**
- * Algolia custom sort order field.
+ * Algolia custom sort order field
  */
-class Algolia_Algoliasearch_Block_System_Config_Form_Field_Facets extends Algolia_Algoliasearch_Block_System_Config_Form_Field_AbstractField
+class Algolia_Algoliasearch_Block_System_Config_Form_Field_Facets extends Mage_Adminhtml_Block_System_Config_Form_Field_Array_Abstract
 {
+    protected $selectFields = array();
+
+    protected function getRenderer($columnId) {
+        if (!array_key_exists($columnId, $this->selectFields) || !$this->selectFields[$columnId])
+        {
+            $product_helper = Mage::helper('algoliasearch/entity_producthelper');
+
+            $aOptions = array();
+
+            $selectField = Mage::app()->getLayout()->createBlock('algoliasearch/system_config_form_field_select')->setIsRenderToJsTemplate(true);
+
+            switch($columnId) {
+                case 'attribute': // Populate the attribute column with a list of searchable attributes
+                    $searchableAttributes = $product_helper->getAllAttributes();
+
+                    foreach ($searchableAttributes as $key => $label) {
+                        $aOptions[$key] = $key ? $key : $label;
+                    }
+
+                    $selectField->setExtraParams('style="width:160px;"');
+
+                    break;
+                case 'type':
+                    $aOptions = array(
+                        'conjunctive'   => 'Conjunctive',
+                        'disjunctive'   => 'Disjunctive',
+                        'slider'        => 'Slider',
+                        'other'         => 'Other ->'
+                    );
+
+                    $selectField->setExtraParams('style="width:100px;"');
+
+                    break;
+                default:
+                    throw new Exception('Unknown attribute id ' . $columnId);
+            }
+
+            $selectField->setOptions($aOptions);
+            $this->selectFields[$columnId] = $selectField;
+        }
+        return $this->selectFields[$columnId];
+    }
+
     public function __construct()
     {
-        $this->settings = array(
-            'columns' => array(
-                'attribute' => array(
-                    'label'   => 'Attribute',
-                    'options' => function () {
-                        $options = array();
+        $this->addColumn('attribute', array(
+            'label' => Mage::helper('adminhtml')->__('Attribute'),
+            'renderer'=> $this->getRenderer('attribute'),
+        ));
 
-                        /** @var Algolia_Algoliasearch_Helper_Entity_Producthelper $product_helper */
-                        $product_helper = Mage::helper('algoliasearch/entity_producthelper');
+        $this->addColumn('type', array(
+            'label' => Mage::helper('adminhtml')->__('Facet type'),
+            'renderer'=> $this->getRenderer('type'),
+        ));
 
-                        $attributes = $product_helper->getAllAttributes();
-                        foreach ($attributes as $key => $label) {
-                            $options[$key] = $key ?: $label;
-                        }
+        $this->addColumn('other_type', array(
+            'label' => Mage::helper('adminhtml')->__('Other facet type'),
+            'style' => 'width: 100px;'
+        ));
 
-                        return $options;
-                    },
-                    'rowMethod' => 'getAttribute',
-                    'width'     => 160,
-                ),
-                'type' => array(
-                    'label'   => 'Facet type',
-                    'options' => array(
-                        'conjunctive' => 'Conjunctive',
-                        'disjunctive' => 'Disjunctive',
-                        'slider'      => 'Slider',
-                        'priceRanges' => 'Price Ranges',
-                    ),
-                    'rowMethod' => 'getType',
-                ),
-                'label' => array(
-                    'label' => 'Label',
-                    'style' => 'width: 100px;',
-                ),
-            ),
-            'buttonLabel' => 'Add Facet',
-            'addAfter'    => false,
+        $this->addColumn('label', array(
+            'label' => Mage::helper('adminhtml')->__('Label'),
+            'style' => 'width: 100px;'
+        ));
+
+        $this->_addAfter = false;
+        $this->_addButtonLabel = Mage::helper('adminhtml')->__('Add Attribute');
+        parent::__construct();
+    }
+
+    protected function _prepareArrayRow(Varien_Object $row)
+    {
+        $row->setData(
+            'option_extra_attr_' . $this->getRenderer('attribute')->calcOptionHash(
+                $row->getAttribute()),
+            'selected="selected"'
         );
 
-        parent::__construct();
+        $row->setData(
+            'option_extra_attr_' . $this->getRenderer('type')->calcOptionHash(
+                $row->getType()),
+            'selected="selected"'
+        );
     }
 }

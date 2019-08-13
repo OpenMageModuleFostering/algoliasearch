@@ -3,7 +3,7 @@
 /**
  * Algolia custom sort order field
  */
-class Algolia_Algoliasearch_Block_System_Config_Form_Field_Sorts extends Mage_Adminhtml_Block_System_Config_Form_Field_Array_Abstract
+class Algolia_Algoliasearch_Block_System_Config_Form_Field_Customsortorder extends Mage_Adminhtml_Block_System_Config_Form_Field_Array_Abstract
 {
     protected $selectFields = array();
 
@@ -15,37 +15,28 @@ class Algolia_Algoliasearch_Block_System_Config_Form_Field_Sorts extends Mage_Ad
      * @throws Exception
      */
     protected function getRenderer($columnId) {
-        if (!array_key_exists($columnId, $this->selectFields) || !$this->selectFields[$columnId])
-        {
-            $product_helper = Mage::helper('algoliasearch/entity_producthelper');
-
-            $aOptions = array();
-
-            $selectField = Mage::app()->getLayout()->createBlock('algoliasearch/system_config_form_field_select')->setIsRenderToJsTemplate(true);
-
+        if (!array_key_exists($columnId, $this->selectFields) || !$this->selectFields[$columnId]) {
+            $aOptions = array('popularity' => Mage::helper('algoliasearch')->__('Popularity'));
             switch($columnId) {
                 case 'attribute': // Populate the attribute column with a list of searchable attributes
-                    $searchableAttributes = $product_helper->getAllAttributes();
-
-                    foreach ($searchableAttributes as $key => $label) {
-                        $aOptions[$key] = $key ? $key : $label;
+                    $searchableAttributes = Mage::getResourceModel('algoliasearch/fulltext')->getSearchableAttributes();
+                    foreach ($searchableAttributes as $attribute){
+                        $aOptions[$attribute->getAttributecode()] = $attribute->getFrontendLabel();
                     }
-
-                    $selectField->setExtraParams('style="width:160px;"');
                     break;
-                case 'sort':
+                case 'order':
                     $aOptions = array(
-                        'asc'   => 'Ascending',
-                        'desc'  => 'Descending',
+                        'desc' => 'Descending',
+                        'asc' => 'Ascending',
                     );
-
-                    $selectField->setExtraParams('style="width:100px;"');
                     break;
                 default:
                     throw new Exception('Unknown attribute id ' . $columnId);
             }
 
+            $selectField = Mage::app()->getLayout()->createBlock('algoliasearch/system_config_form_field_select')->setIsRenderToJsTemplate(true);
             $selectField->setOptions($aOptions);
+            $selectField->setExtraParams('style="width:160px;"');
             $this->selectFields[$columnId] = $selectField;
         }
         return $this->selectFields[$columnId];
@@ -57,19 +48,12 @@ class Algolia_Algoliasearch_Block_System_Config_Form_Field_Sorts extends Mage_Ad
             'label' => Mage::helper('adminhtml')->__('Attribute'),
             'renderer'=> $this->getRenderer('attribute'),
         ));
-
-        $this->addColumn('sort', array(
-            'label' => Mage::helper('adminhtml')->__('Sort'),
-            'renderer'=> $this->getRenderer('sort'),
+        $this->addColumn('order', array(
+            'label' => Mage::helper('adminhtml')->__('Sort Order'),
+            'renderer'=> $this->getRenderer('order'),
         ));
-
-        $this->addColumn('label', array(
-            'label' => Mage::helper('adminhtml')->__('Label'),
-            'style' => 'width: 200px;'
-        ));
-
         $this->_addAfter = false;
-        $this->_addButtonLabel = Mage::helper('adminhtml')->__('Add Attribute');
+        $this->_addButtonLabel = Mage::helper('adminhtml')->__('Add Custom Sort Order');
         parent::__construct();
     }
 
@@ -80,10 +64,9 @@ class Algolia_Algoliasearch_Block_System_Config_Form_Field_Sorts extends Mage_Ad
                 $row->getAttribute()),
             'selected="selected"'
         );
-
         $row->setData(
-            'option_extra_attr_' . $this->getRenderer('sort')->calcOptionHash(
-                $row->getSort()),
+            'option_extra_attr_' . $this->getRenderer('order')->calcOptionHash(
+                $row->getOrder()),
             'selected="selected"'
         );
     }

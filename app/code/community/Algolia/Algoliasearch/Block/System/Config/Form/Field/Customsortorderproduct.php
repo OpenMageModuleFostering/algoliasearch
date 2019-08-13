@@ -3,7 +3,7 @@
 /**
  * Algolia custom sort order field
  */
-class Algolia_Algoliasearch_Block_System_Config_Form_Field_Sorts extends Mage_Adminhtml_Block_System_Config_Form_Field_Array_Abstract
+class Algolia_Algoliasearch_Block_System_Config_Form_Field_Customsortorderproduct extends Mage_Adminhtml_Block_System_Config_Form_Field_Array_Abstract
 {
     protected $selectFields = array();
 
@@ -14,7 +14,8 @@ class Algolia_Algoliasearch_Block_System_Config_Form_Field_Sorts extends Mage_Ad
      * @return Algolia_Algoliasearch_Block_System_Config_Form_Field_Select
      * @throws Exception
      */
-    protected function getRenderer($columnId) {
+    protected function getRenderer($columnId)
+    {
         if (!array_key_exists($columnId, $this->selectFields) || !$this->selectFields[$columnId])
         {
             $product_helper = Mage::helper('algoliasearch/entity_producthelper');
@@ -32,11 +33,28 @@ class Algolia_Algoliasearch_Block_System_Config_Form_Field_Sorts extends Mage_Ad
                     }
 
                     $selectField->setExtraParams('style="width:160px;"');
+
                     break;
-                case 'sort':
+                case 'searchable':
                     $aOptions = array(
-                        'asc'   => 'Ascending',
-                        'desc'  => 'Descending',
+                        '1' => 'Yes',
+                        '0' => 'No',
+                    );
+
+                    $selectField->setExtraParams('style="width:100px;"');
+                    break;
+                case 'retrievable':
+                    $aOptions = array(
+                        '1' => 'Yes',
+                        '0' => 'No',
+                    );
+
+                    $selectField->setExtraParams('style="width:100px;"');
+                    break;
+                case 'order':
+                    $aOptions = array(
+                        'ordered' => 'Ordered',
+                        'unordered' => 'Unordered',
                     );
 
                     $selectField->setExtraParams('style="width:100px;"');
@@ -57,17 +75,18 @@ class Algolia_Algoliasearch_Block_System_Config_Form_Field_Sorts extends Mage_Ad
             'label' => Mage::helper('adminhtml')->__('Attribute'),
             'renderer'=> $this->getRenderer('attribute'),
         ));
-
-        $this->addColumn('sort', array(
-            'label' => Mage::helper('adminhtml')->__('Sort'),
-            'renderer'=> $this->getRenderer('sort'),
+        $this->addColumn('searchable', array(
+            'label' => Mage::helper('adminhtml')->__('Searchable'),
+            'renderer'=> $this->getRenderer('searchable'),
         ));
-
-        $this->addColumn('label', array(
-            'label' => Mage::helper('adminhtml')->__('Label'),
-            'style' => 'width: 200px;'
+        $this->addColumn('retrievable', array(
+            'label' => Mage::helper('adminhtml')->__('Retrievable'),
+            'renderer'=> $this->getRenderer('retrievable'),
         ));
-
+        $this->addColumn('order', array(
+            'label' => Mage::helper('adminhtml')->__('Ordered'),
+            'renderer'=> $this->getRenderer('order'),
+        ));
         $this->_addAfter = false;
         $this->_addButtonLabel = Mage::helper('adminhtml')->__('Add Attribute');
         parent::__construct();
@@ -80,10 +99,19 @@ class Algolia_Algoliasearch_Block_System_Config_Form_Field_Sorts extends Mage_Ad
                 $row->getAttribute()),
             'selected="selected"'
         );
-
         $row->setData(
-            'option_extra_attr_' . $this->getRenderer('sort')->calcOptionHash(
-                $row->getSort()),
+            'option_extra_attr_' . $this->getRenderer('searchable')->calcOptionHash(
+                $row->getSearchable()),
+            'selected="selected"'
+        );
+        $row->setData(
+            'option_extra_attr_' . $this->getRenderer('retrievable')->calcOptionHash(
+                $row->getRetrievable()),
+            'selected="selected"'
+        );
+        $row->setData(
+            'option_extra_attr_' . $this->getRenderer('order')->calcOptionHash(
+                $row->getOrder()),
             'selected="selected"'
         );
     }

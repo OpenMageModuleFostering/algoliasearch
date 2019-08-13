@@ -3,417 +3,95 @@
 class Algolia_Algoliasearch_Model_Queue
 {
     const SUCCESS_LOG = 'algoliasearch_queue_log.txt';
-    const ERROR_LOG = 'algoliasearch_queue_errors.log';
+    const ERROR_LOG   = 'algoliasearch_queue_errors.log';
 
     protected $table;
-    protected $logTable;
-
-    /** @var Magento_Db_Adapter_Pdo_Mysql */
     protected $db;
 
-    /** @var Algolia_Algoliasearch_Helper_Config */
     protected $config;
-
-    /** @var Algolia_Algoliasearch_Helper_Logger */
-    protected $logger;
-
-    protected $maxSingleJobDataSize;
-
-    private $staticJobMethods = array(
-        'saveSettings',
-        'moveProductsTmpIndex',
-        'deleteProductsStoreIndices',
-        'removeCategories',
-        'deleteCategoriesStoreIndices',
-        'moveStoreSuggestionIndex',
-    );
-
-    private $noOfFailedJobs = 0;
-
-    private $logRecord = array();
 
     public function __construct()
     {
-        /** @var Mage_Core_Model_Resource $coreResource */
-        $coreResource = Mage::getSingleton('core/resource');
-
-        $this->table = $coreResource->getTableName('algoliasearch/queue');
-        $this->logTable = $this->table.'_log';
-
-        $this->db = $coreResource->getConnection('core_write');
+        $this->table = Mage::getSingleton('core/resource')->getTableName('algoliasearch/queue');
+        $this->db = Mage::getSingleton('core/resource')->getConnection('core_write');
 
         $this->config = Mage::helper('algoliasearch/config');
-        $this->logger = Mage::helper('algoliasearch/logger');
-
-        $this->maxSingleJobDataSize = $this->config->getNumberOfElementByPage();
     }
 
-    public function add($class, $method, $data, $data_size)
+    public function add($class, $method, $data, $retries = NULL)
     {
         // Insert a row for the new job
         $this->db->insert($this->table, array(
-            'created'   => date('Y-m-d H:i:s'),
-            'class'     => $class,
-            'method'    => $method,
-            'data'      => json_encode($data),
-            'data_size' => $data_size,
-            'pid'       => null,
+            'class' => $class,
+            'method' => $method,
+            'data' => serialize($data),
+            'max_retries' => max(array(1,(int)($retries ? $retries : $this->config->getQueueMaxRetries()))),
+            'pid' => NULL,
         ));
     }
 
-    public function runCron($nbJobs = null, $force = false)
+    public function runCron()
     {
-        if (!$this->config->isQueueActive() && $force === false) {
+        if ( ! $this->config->isQueueActive())
             return;
-        }
 
-        $this->clearOldLogRecords();
+        $this->run($this->config->getNumberOfJobToRun());
+    }
 
-        $this->logRecord = array(
-            'started' => date('Y-m-d H:i:s'),
-            'processed_jobs' => 0,
-            'with_empty_queue' => 0,
-        );
+    public function run($limit = null)
+    {
+        // Cleanup crashed jobs
+        $pids = $this->db->fetchCol("SELECT pid FROM {$this->table} WHERE pid IS NOT NULL GROUP BY pid");
+        foreach ($pids as $pid) {
+            // Old pid is no longer running, release it's reserved tasks
+            if (is_numeric($pid) && ! file_exists("/proc/{$pid}/status")) {
+                Mage::log("A crashed job queue process was detected for pid {$pid}", Zend_Log::NOTICE, self::ERROR_LOG);
 
-        $started = time();
-
-        if ($nbJobs === null) {
-            $nbJobs = $this->config->getNumberOfJobToRun();
-            if (getenv('EMPTY_QUEUE') && getenv('EMPTY_QUEUE') == '1') {
-                $nbJobs = -1;
-
-                $this->logRecord['with_empty_queue'] = 1;
+                $expr = array('pid' => new Zend_Db_Expr('NULL'), 'retries' => new Zend_Db_Expr('retries + 1'));
+                $binding = array('pid = ?' => $pid);
+                $this->db->update($this->table, $expr, $binding);
             }
         }
 
-        $this->run($nbJobs);
-
-        $this->logRecord['duration'] = time() - $started;
-
-        $this->db->insert($this->logTable, $this->logRecord);
-
-        $this->db->closeConnection();
-    }
-
-    public function run($maxJobs)
-    {
+        // Reserve all new jobs since last run
         $pid = getmypid();
-
-        $jobs = $this->getJobs($maxJobs, $pid);
-
-        if (empty($jobs)) {
-            return;
-        }
+        $limit = ($limit ? "LIMIT $limit":'');
+        $batchSize = $this->db->query("UPDATE {$this->db->quoteIdentifier($this->table,true)} SET pid = {$pid} WHERE pid IS NULL ORDER BY job_id $limit")->rowCount();
 
         // Run all reserved jobs
-        foreach ($jobs as $job) {
-            // If there are some failed jobs before move, we want to skip the move
-            // as most probably not all products have prices reindexed
-            // and therefore are not indexed yet in TMP index
-            if ($job['method'] === 'moveProductsTmpIndex' && $this->noOfFailedJobs > 0) {
-                // Set pid to NULL so it's not deleted after
-                $this->db->query("UPDATE {$this->db->quoteIdentifier($this->table, true)} SET pid = NULL WHERE job_id = ".$job['job_id']);
+        $result = $this->db->query($this->db->select()->from($this->table, '*')->where('pid = ?',$pid)->order(array('job_id')));
+        while ($row = $result->fetch()) {
+            $where = $this->db->quoteInto('job_id = ?', $row['job_id']);
+            $data = (substr($row['data'],0,1) == '{') ? json_decode($row['data'], TRUE) : $data = unserialize($row['data']);
 
+            // Check retries
+            if ($row['retries'] >= $row['max_retries']) {
+                $this->db->delete($this->table, $where);
+                Mage::log("{$row['pid']}: Mage::getSingleton({$row['class']})->{$row['method']}(".json_encode($data).")\n".$row['error_log'], Zend_Log::ERR, self::ERROR_LOG);
                 continue;
             }
 
+            // Run job!
             try {
-                $model = Mage::getSingleton($job['class']);
-                $method = $job['method'];
-                $model->{$method}(new Varien_Object($job['data']));
-
-                $this->logRecord['processed_jobs'] += count($job['merged_ids']);
-            } catch (\Exception $e) {
-                $this->noOfFailedJobs++;
-
-                // Increment retries, set the job ID back to NULL
-                $updateQuery = "UPDATE {$this->db->quoteIdentifier($this->table, true)} SET pid = NULL, retries = retries + 1 WHERE job_id IN (".implode(', ', (array) $job['merged_ids']).")";
-                $this->db->query($updateQuery);
-
-                // log error information
-                $this->logger->log("Queue processing {$job['pid']} [KO]: Mage::getSingleton({$job['class']})->{$job['method']}(".json_encode($job['data']).')');
-                $this->logger->log(date('c').' ERROR: '.get_class($e).": '{$e->getMessage()}' in {$e->getFile()}:{$e->getLine()}\n"."Stack trace:\n".$e->getTraceAsString());
+                $model = Mage::getSingleton($row['class']);
+                $method = $row['method'];
+                $model->$method(new Varien_Object($data));
+                $this->db->delete($this->table, $where);
+                Mage::log("{$row['pid']}: Mage::getSingleton({$row['class']})->{$row['method']}(".json_encode($data).")", Zend_Log::INFO, self::SUCCESS_LOG);
+            } catch(Exception $e) {
+                // Increment retries and log error information
+                $error =
+                    date('c')." ERROR: ".get_class($e).": '{$e->getMessage()}' in {$e->getFile()}:{$e->getLine()}\n".
+                    "Stack trace:\n".
+                    $e->getTraceAsString();
+                $bind = array(
+                    'pid' => new Zend_Db_Expr('NULL'),
+                    'error_log' => new Zend_Db_Expr('SUBSTR(CONCAT(error_log,'.$this->db->quote($error).',"\n\n"),1,20000)')
+                );
+                $this->db->update($this->table, $bind, $where);
             }
         }
 
-        // Delete only when finished to be able to debug the queue if needed
-        $where = $this->db->quoteInto('pid = ?', $pid);
-        $this->db->delete($this->table, $where);
-
-        $isFullReindex = ($maxJobs === -1);
-        if ($isFullReindex) {
-            $this->run(-1);
-
-            return;
-        }
-    }
-
-    private function getJobs($maxJobs, $pid)
-    {
-        // Clear jobs with crossed max retries count
-        $retryLimit = $this->config->getRetryLimit();
-        if ($retryLimit > 0) {
-            $where = $this->db->quoteInto('retries >= ?', $retryLimit);
-            $this->db->delete($this->table, $where);
-        } else {
-            $this->db->delete($this->table, 'retries > max_retries');
-        }
-
-        $jobs = array();
-
-        $limit = $maxJobs = ($maxJobs === -1) ? $this->config->getNumberOfJobToRun() : $maxJobs;
-        $offset = 0;
-
-        $maxBatchSize = $this->config->getNumberOfElementByPage() * $limit;
-        $actualBatchSize = 0;
-
-        try {
-            $this->db->beginTransaction();
-
-            while ($actualBatchSize < $maxBatchSize) {
-                $data = $this->db->query($this->db->select()->from($this->table, '*')->where('pid IS NULL')
-                                                  ->order(array('job_id'))->limit($limit, $offset)
-                                                  ->forUpdate());
-                $rawJobs = $data->fetchAll();
-                $rowsCount = count($rawJobs);
-
-                if ($rowsCount <= 0) {
-                    break;
-                }
-
-                // If $jobs is empty, it's the first run
-                if (empty($jobs)) {
-                    $firstJobId = $rawJobs[0]['job_id'];
-                }
-
-                $rawJobs = $this->prepareJobs($rawJobs);
-                $rawJobs = array_merge($jobs, $rawJobs);
-                $rawJobs = $this->mergeJobs($rawJobs);
-
-                $rawJobsCount = count($rawJobs);
-
-                $offset += $limit;
-                $limit = max(0, $maxJobs - $rawJobsCount);
-
-                // $jobs will always be completely set from $rawJobs
-                // Without resetting not-merged jobs would be stacked
-                $jobs = array();
-
-                if (count($rawJobs) == $maxJobs) {
-                    $jobs = $rawJobs;
-                    break;
-                }
-
-                foreach ($rawJobs as $job) {
-                    $jobSize = (int) $job['data_size'];
-
-                    if ($actualBatchSize + $jobSize <= $maxBatchSize || empty($jobs)) {
-                        $jobs[] = $job;
-                        $actualBatchSize += $jobSize;
-                    } else {
-                        break 2;
-                    }
-                }
-            }
-
-            $this->db->commit();
-        } catch (\Exception $e) {
-            $this->db->rollBack();
-            $this->db->closeConnection();
-
-            throw $e;
-        }
-
-
-        if (isset($firstJobId)) {
-            $lastJobId = $this->maxValueInArray($jobs, 'job_id');
-
-            // Reserve all new jobs since last run
-            $this->db->query("UPDATE {$this->db->quoteIdentifier($this->table, true)} SET pid = ".$pid.' WHERE job_id >= '.$firstJobId." AND job_id <= $lastJobId");
-        }
-
-        return $jobs;
-    }
-
-    private function prepareJobs($jobs)
-    {
-        foreach ($jobs as &$job) {
-            $job['data'] = json_decode($job['data'], true);
-            $job['merged_ids'][] = $job['job_id'];
-        }
-
-        return $jobs;
-    }
-
-    protected function mergeJobs($oldJobs)
-    {
-        $oldJobs = $this->sortJobs($oldJobs);
-
-        $jobs = array();
-
-        $currentJob = array_shift($oldJobs);
-        $nextJob = null;
-
-        while ($currentJob !== null) {
-            if (count($oldJobs) > 0) {
-                $nextJob = array_shift($oldJobs);
-
-                if ($this->mergeable($currentJob, $nextJob)) {
-                    // Use the job_id of the the very last job to properly mark processed jobs
-                    $currentJob['job_id'] = max((int) $currentJob['job_id'], (int) $nextJob['job_id']);
-
-                    $currentJob['merged_ids'][] = $nextJob['job_id'];
-
-                    if (isset($currentJob['data']['product_ids'])) {
-                        $currentJob['data']['product_ids'] = array_merge($currentJob['data']['product_ids'], $nextJob['data']['product_ids']);
-                    } elseif (isset($currentJob['data']['category_ids'])) {
-                        $currentJob['data']['category_ids'] = array_merge($currentJob['data']['category_ids'], $nextJob['data']['category_ids']);
-                    }
-
-                    continue;
-                }
-            } else {
-                $nextJob = null;
-            }
-
-            if (isset($currentJob['data']['product_ids'])) {
-                $currentJob['data']['product_ids'] = array_unique($currentJob['data']['product_ids']);
-                $currentJob['data_size'] = count($currentJob['data']['product_ids']);
-            }
-
-            if (isset($currentJob['data']['category_ids'])) {
-                $currentJob['data']['category_ids'] = array_unique($currentJob['data']['category_ids']);
-                $currentJob['data_size'] = count($currentJob['data']['category_ids']);
-            }
-
-            $jobs[] = $currentJob;
-            $currentJob = $nextJob;
-        }
-
-        return $jobs;
-    }
-
-    private function sortJobs($oldJobs)
-    {
-        $sortedJobs = array();
-
-        $tempSortableJobs = array();
-        foreach ($oldJobs as $job) {
-            if (in_array($job['method'], $this->staticJobMethods, true)) {
-                $sortedJobs = $this->stackSortedJobs($sortedJobs, $tempSortableJobs, $job);
-                $tempSortableJobs = array();
-
-                continue;
-            }
-
-            // This one is needed for proper sorting
-            if (isset($job['data']['store_id'])) {
-                $job['store_id'] = $job['data']['store_id'];
-            }
-
-            $tempSortableJobs[] = $job;
-        }
-
-        $sortedJobs = $this->stackSortedJobs($sortedJobs, $tempSortableJobs);
-
-        return $sortedJobs;
-    }
-
-    private function stackSortedJobs($sortedJobs, $tempSortableJobs, $job = null)
-    {
-        if (!empty($tempSortableJobs)) {
-            $tempSortableJobs = $this->arrayMultisort($tempSortableJobs, 'class', SORT_ASC, 'method', SORT_ASC, 'store_id', SORT_ASC, 'job_id', SORT_ASC);
-        }
-
-        $sortedJobs = array_merge($sortedJobs, $tempSortableJobs);
-
-        if ($job !== null) {
-            $sortedJobs = array_merge($sortedJobs, array($job));
-        }
-
-        return $sortedJobs;
-    }
-
-    private function mergeable($j1, $j2)
-    {
-        if ($j1['class'] !== $j2['class']) {
-            return false;
-        }
-
-        if ($j1['method'] !== $j2['method']) {
-            return false;
-        }
-
-        if (isset($j1['data']['store_id']) && isset($j2['data']['store_id']) && $j1['data']['store_id'] !== $j2['data']['store_id']) {
-            return false;
-        }
-
-        if ((!isset($j1['data']['product_ids']) || count($j1['data']['product_ids']) <= 0) && (!isset($j1['data']['category_ids']) || count($j1['data']['category_ids']) < 0)) {
-            return false;
-        }
-
-        if ((!isset($j2['data']['product_ids']) || count($j2['data']['product_ids']) <= 0) && (!isset($j2['data']['category_ids']) || count($j2['data']['category_ids']) < 0)) {
-            return false;
-        }
-
-        if (isset($j1['data']['product_ids']) && count($j1['data']['product_ids']) + count($j2['data']['product_ids']) > $this->maxSingleJobDataSize) {
-            return false;
-        }
-
-        if (isset($j1['data']['category_ids']) && count($j1['data']['category_ids']) + count($j2['data']['category_ids']) > $this->maxSingleJobDataSize) {
-            return false;
-        }
-
-        return true;
-    }
-
-    private function arrayMultisort()
-    {
-        $args = func_get_args();
-
-        $data = array_shift($args);
-
-        foreach ($args as $n => $field) {
-            if (is_string($field)) {
-                $tmp = array();
-
-                foreach ($data as $key => $row) {
-                    $tmp[$key] = $row[$field];
-                }
-
-                $args[$n] = $tmp;
-            }
-        }
-
-        $args[] = &$data;
-
-        call_user_func_array('array_multisort', $args);
-
-        return array_pop($args);
-    }
-
-    private function maxValueInArray($array, $keyToSearch)
-    {
-        $currentMax = null;
-
-        foreach ($array as $arr) {
-            foreach ($arr as $key => $value) {
-                if ($key == $keyToSearch && ($value >= $currentMax)) {
-                    $currentMax = $value;
-                }
-            }
-        }
-
-        return $currentMax;
-    }
-
-    private function clearOldLogRecords()
-    {
-        $idsToDelete = $this->db->query("SELECT id FROM {$this->logTable} ORDER BY started DESC, id DESC LIMIT 25000, ".PHP_INT_MAX)
-                        ->fetchAll(\PDO::FETCH_COLUMN, 0);
-
-        if ($idsToDelete) {
-            $this->db->query("DELETE FROM {$this->logTable} WHERE id IN (" . implode(", ", $idsToDelete) . ")");
-        }
+        return $batchSize;
     }
 }

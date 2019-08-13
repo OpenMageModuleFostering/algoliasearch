@@ -9,97 +9,49 @@ class Algolia_Algoliasearch_Helper_Entity_Pagehelper extends Algolia_Algoliasear
 
     public function getIndexSettings($storeId)
     {
-        $indexSettings = array(
-            'searchableAttributes' => array('unordered(slug)', 'unordered(name)', 'unordered(content)'),
-            'attributesToSnippet'  => array('content:7'),
+        return array(
+            'attributesToIndex'         => array('slug', 'name', 'unordered(content)'),
         );
-
-        $transport = new Varien_Object($indexSettings);
-        Mage::dispatchEvent('algolia_pages_index_before_set_settings', array('store_id' => $storeId, 'index_settings' => $transport));
-        $indexSettings = $transport->getData();
-
-        return $indexSettings;
     }
 
-    public function getPages($storeId, $pageIds = null)
+    public function getPages($storeId)
     {
-        /** @var Mage_Cms_Model_Page $cmsPage */
-        $cmsPage = Mage::getModel('cms/page');
+        $magento_pages = Mage::getModel('cms/page')->getCollection()->addFieldToFilter('is_active',1);
 
-        /** @var Mage_Cms_Model_Resource_Page_Collection $pages */
-        $pages = $cmsPage->getCollection()->addStoreFilter($storeId)->addFieldToFilter('is_active', 1);
+        $ids = $magento_pages->toOptionArray();
 
-        if ($pageIds && count($pageIds) > 0) {
-            $pages = $pages->addFieldToFilter('page_id', array('in' => $pageIds));
-        }
+        $excluded_pages = array_values($this->config->getExcludedPages());
 
-        Mage::dispatchEvent('algolia_after_pages_collection_build', array('store' => $storeId, 'collection' => $pages));
-
-        $ids = $pages->toOptionArray();
-
-        $exludedPages = array_values($this->config->getExcludedPages());
-
-        foreach ($exludedPages as &$excludedPage) {
-            $excludedPage = $excludedPage['pages'];
-        }
+        foreach ($excluded_pages as &$excluded_page)
+            $excluded_page = $excluded_page['pages'];
 
         $pages = array();
 
-        foreach ($ids as $key => $value) {
-            if (in_array($value['value'], $exludedPages)) {
+        foreach ($ids as $key => $value)
+        {
+            if (in_array($value['value'], $excluded_pages))
                 continue;
-            }
 
-            $pageObject = array();
+            $page_obj = array();
 
-            $pageObject['slug'] = $value['value'];
-            $pageObject['name'] = $value['label'];
+            $page_obj['slug'] = $value['value'];
+            $page_obj['name'] = $value['label'];
 
-            /** @var Mage_Cms_Model_Page $page */
             $page = Mage::getModel('cms/page');
-
             $page->setStoreId($storeId);
-            $page->load($pageObject['slug'], 'identifier');
+            $page->load($page_obj['slug'], 'identifier');
 
-            if (!$page->getId()) {
+            if (! $page->getId())
                 continue;
-            }
 
-            $content = $page->getContent();
-            if ($this->config->getRenderTemplateDirectives()) {
-                /** @var Mage_Cms_Helper_Data $cms_helper */
-                $cms_helper = Mage::helper('cms');
-                $tmplProc = $cms_helper->getPageTemplateProcessor();
-                $content = $tmplProc->filter($content);
-            }
+            $page_obj['objectID'] = $page->getId();
 
-            /** @var Mage_Cms_Helper_Page $cmsPageHelper */
-            $cmsPageHelper = Mage::helper('cms/page');
+            $page_obj['url'] = Mage::helper('cms/page')->getPageUrl($page->getId());
+            $page_obj['content'] = $this->strip($page->getContent());
 
-            $pageObject['objectID'] = $page->getId();
-            $pageObject['url'] = $cmsPageHelper->getPageUrl($page->getId());
-            $pageObject['content'] = $this->strip($content, array('script', 'style'));
-
-            $transport = new Varien_Object($pageObject);
-            Mage::dispatchEvent('algolia_after_create_page_object', array('page' => $transport, 'pageObject' => $page));
-            $pageObject = $transport->getData();
-
-            $pages[] = $pageObject;
+            $pages[] = $page_obj;
         }
 
         return $pages;
-    }
-
-    public function shouldIndexPages($storeId)
-    {
-        $autocompleteSections = $this->config->getAutocompleteSections($storeId);
-
-        foreach ($autocompleteSections as $section) {
-            if ($section['name'] === 'pages') {
-                return true;
-            }
-        }
-
-        return false;
     }
 }
