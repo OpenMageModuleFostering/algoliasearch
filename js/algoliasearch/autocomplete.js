@@ -55,6 +55,10 @@ document.addEventListener("DOMContentLoaded", function(event) {
 		});
 		
 		/**
+		 * ADD YOUR CUSTOM DATA SOURCE HERE
+		 **/
+		
+		/**
 		 * Setup the autocomplete search input
 		 * For autocomplete feature is used Algolia's autocomplete.js library
 		 * Docs: https://github.com/algolia/autocomplete.js
@@ -84,6 +88,8 @@ document.addEventListener("DOMContentLoaded", function(event) {
 				})
 				.on('autocomplete:updated', function (e) {
 					fixAutocompleteCssHeight(menu);
+				}).on('autocomplete:selected', function (e, suggestion, dataset) {
+					location.assign(suggestion.url);
 				});
 			
 			$(window).resize(function () {
