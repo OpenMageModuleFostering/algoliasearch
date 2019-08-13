@@ -5,7 +5,8 @@
 class Algolia_Algoliasearch_Model_Resource_Engine extends Mage_CatalogSearch_Model_Resource_Fulltext_Engine
 {
     const ONE_TIME_AMOUNT = 100;
-    private $helper;
+    /** @var Algolia_Algoliasearch_Helper_Logger */
+    private $logger;
     private $queue;
     private $config;
     private $product_helper;
@@ -18,6 +19,7 @@ class Algolia_Algoliasearch_Model_Resource_Engine extends Mage_CatalogSearch_Mod
 
         $this->queue = Mage::getSingleton('algoliasearch/queue');
         $this->config = Mage::helper('algoliasearch/config');
+        $this->logger = Mage::helper('algoliasearch/logger');
         $this->product_helper = Mage::helper('algoliasearch/entity_producthelper');
         $this->category_helper = Mage::helper('algoliasearch/entity_categoryhelper');
         $this->suggestion_helper = Mage::helper('algoliasearch/entity_suggestionhelper');
@@ -29,16 +31,6 @@ class Algolia_Algoliasearch_Model_Resource_Engine extends Mage_CatalogSearch_Mod
             $this->queue->add($observer, $method, $data, $nb_retry);
         else
             Mage::getSingleton($observer)->$method(new Varien_Object($data));
-    }
-
-    public function getAllowedVisibility()
-    {
-        return Mage::getSingleton('catalog/product_visibility')->getVisibleInSearchIds();
-    }
-
-    public function allowAdvancedIndex()
-    {
-        return FALSE;
     }
 
     public function removeProducts($storeId = null, $product_ids = null)
@@ -94,17 +86,13 @@ class Algolia_Algoliasearch_Model_Resource_Engine extends Mage_CatalogSearch_Mod
     public function rebuildPages()
     {
         foreach (Mage::app()->getStores() as $store)
-        {
             $this->addToQueue('algoliasearch/observer', 'rebuildPageIndex', array('store_id' => $store->getId()), $this->config->getQueueMaxRetries());
-        }
     }
 
     public function rebuildAdditionalSections()
     {
         foreach (Mage::app()->getStores() as $store)
-        {
             $this->addToQueue('algoliasearch/observer', 'rebuildAdditionalSectionsIndex', array('store_id' => $store->getId()), $this->config->getQueueMaxRetries());
-        }
     }
 
     public function rebuildSuggestions()
@@ -130,8 +118,6 @@ class Algolia_Algoliasearch_Model_Resource_Engine extends Mage_CatalogSearch_Mod
 
     public function rebuildProducts()
     {
-        Mage::getSingleton('algoliasearch/observer')->saveSettings();
-
         foreach (Mage::app()->getStores() as $store)
         {
             if ($store->getIsActive())
@@ -147,8 +133,6 @@ class Algolia_Algoliasearch_Model_Resource_Engine extends Mage_CatalogSearch_Mod
 
     public function rebuildCategories()
     {
-        Mage::getSingleton('algoliasearch/observer')->saveSettings();
-
         foreach (Mage::app()->getStores() as $store)
         {
             if ($store->getIsActive())
@@ -220,11 +204,15 @@ class Algolia_Algoliasearch_Model_Resource_Engine extends Mage_CatalogSearch_Mod
         else
             $this->addToQueue('algoliasearch/observer', 'rebuildProductIndex', array('store_id' => $storeId, 'product_ids' =>  $productIds), $this->config->getQueueMaxRetries());
 
+
         return $this;
     }
 
     public function prepareEntityIndex($index, $separator = ' ')
     {
+        if ($this->config->isEnabledBackEnd(Mage::app()->getStore()->getId()) === false)
+            return parent::rebuildIndex($index, $separator);
+
         foreach ($index as $key => $value) {
             if (is_array($value) && ! empty($value)) {
                 $index[$key] = join($separator, array_unique(array_filter($value)));
@@ -238,10 +226,5 @@ class Algolia_Algoliasearch_Model_Resource_Engine extends Mage_CatalogSearch_Mod
     public function saveSettings()
     {
         Mage::getSingleton('algoliasearch/observer')->saveSettings();
-    }
-
-    public function test()
-    {
-        return true;
     }
 }
