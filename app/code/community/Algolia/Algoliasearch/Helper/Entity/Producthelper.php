@@ -4,7 +4,7 @@ class Algolia_Algoliasearch_Helper_Entity_Producthelper extends Algolia_Algolias
 {
     protected static $_productAttributes;
 
-    protected static $_predefinedProductAttributes = array('name', 'url_key', 'description', 'image', 'thumbnail');
+    protected static $_predefinedProductAttributes = array('name', 'url_key', 'description', 'image', 'small_image', 'thumbnail');
 
     protected function getIndexNameSuffix()
     {
@@ -233,144 +233,147 @@ class Algolia_Algoliasearch_Helper_Entity_Producthelper extends Algolia_Algolias
         }
     }
 
-    private function handlePrice(&$product, $sub_products, &$customData, $groups = array(), $current_group_id = null)
+    private function getFields($store)
     {
-        $customData['price'] = array();
+        $tax_helper = Mage::helper('tax');
 
-        $customData['price']['default']             = (double) Mage::helper('tax')->getPrice($product, $product->getPrice(), null, null, null, null, $product->getStore(), null);
-        $customData['price']['default_formated'] = $product->getStore()->formatPrice($customData['price']['default'], false);
+        if ($tax_helper->getPriceDisplayType($store) == Mage_Tax_Model_Config::DISPLAY_TYPE_EXCLUDING_TAX)
+            return array('price' => false);
 
-        if ($this->config->isCustomerGroupsEnabled($product->getStoreId()))
+        if ($tax_helper->getPriceDisplayType($store) == Mage_Tax_Model_Config::DISPLAY_TYPE_INCLUDING_TAX)
+            return array('price' => true);
+
+        return array('price' => false, 'price_with_tax' => true);
+    }
+
+    private function handlePrice(&$product, $sub_products, &$customData)
+    {
+        $fields                     = $this->getFields($product->getStore());
+        $customer_groups_enabled    = $this->config->isCustomerGroupsEnabled($product->getStoreId());
+        $store                      = $product->getStore();
+        $type                       = $this->config->getMappedProductType($product->getTypeId());
+
+        $groups                     = array();
+
+        if ($customer_groups_enabled)
+            $groups = Mage::getModel('customer/group')->getCollection();
+
+        foreach ($fields as $field => $with_tax)
         {
-            foreach ($groups as $group)
-            {
-                $group_id = (int)$group->getData('customer_group_id');
+            $price = (double) Mage::helper('tax')->getPrice($product, $product->getPrice(), $with_tax, null, null, null, $product->getStore(), null);
 
-                $customData['price']['group_' . $group_id] = $customData['price']['default'];
-                $customData['price']['group_' . $group_id . '_formated'] = $customData['price']['default_formated'];
-            }
-        }
+            $customData[$field] = array();
 
-        $special_price = null;
+            $customData[$field]['default'] = $price;
+            $customData[$field]['default_formated'] = $product->getStore()->formatPrice($price, false);
 
-        if ($current_group_id !== null) // If fetch special price for groups
-        {
-            $discounted_price = Mage::getResourceModel('catalogrule/rule')->getRulePrice(
-                Mage::app()->getLocale()->storeTimeStamp($product->getStoreId()),
-                Mage::app()->getStore($product->getStoreId())->getWebsiteId(),
-                $current_group_id,
-                $product->getId()
-            );
 
-            if ($discounted_price !== false)
-                $special_price = $discounted_price;
-
-            if ($this->config->isCustomerGroupsEnabled($product->getStoreId()))
+            if ($customer_groups_enabled) // If fetch special price for groups
             {
                 foreach ($groups as $group)
                 {
                     $group_id = (int)$group->getData('customer_group_id');
+                    $product->setCustomerGroupId($group_id);
 
-                    $discounted_price = Mage::getResourceModel('catalogrule/rule')->getRulePrice(
-                        Mage::app()->getLocale()->storeTimeStamp($product->getStoreId()),
-                        Mage::app()->getStore($product->getStoreId())->getWebsiteId(),
-                        $group_id,
-                        $product->getId()
-                    );
+                    $discounted_price = $product->getPriceModel()->getFinalPrice(1, $product);
 
                     if ($discounted_price !== false)
                     {
-                        $customData['price']['group_' . $group_id] = (double) Mage::helper('tax')->getPrice($product, $discounted_price, null, null, null, null, $product->getStore(), null);
-                        $customData['price']['group_' . $group_id . '_formated'] = $product->getStore()->formatPrice($customData['price']['group_' . $group_id], false);
+                        $customData[$field]['group_' . $group_id] = (double) Mage::helper('tax')->getPrice($product, $discounted_price, $with_tax, null, null, null, $product->getStore(), null);
+                        $customData[$field]['group_' . $group_id . '_formated'] = $store->formatPrice($customData[$field]['group_' . $group_id], false);
                     }
-                }
-            }
-
-        }
-        else // If fetch default special price
-        {
-            $special_price = (double) $product->getFinalPrice();
-        }
-
-        if ($special_price && $special_price !== $customData['price']['default'])
-        {
-            $customData['price']['special_from_date'] = strtotime($product->getSpecialFromDate());
-            $customData['price']['special_to_date'] = strtotime($product->getSpecialToDate());
-
-            $customData['price']['default_original_formated'] = $customData['price']['default'.'_formated'];
-
-            $special_price = (double) Mage::helper('tax')->getPrice($product, $special_price, null, null, null, null, $product->getStore(), null);
-            $customData['price']['default'] = $special_price;
-            $customData['price']['default_formated'] = $product->getStore()->formatPrice($special_price, false);
-        }
-
-        if ($product->getTypeId() == 'configurable' || $product->getTypeId() == 'grouped' || $product->getTypeId() == 'bundle')
-        {
-            $min = PHP_INT_MAX;
-            $max = 0;
-
-            if ($product->getTypeId() == 'bundle')
-            {
-                $_priceModel = $product->getPriceModel();
-
-                list($min, $max) = $_priceModel->getTotalPrices($product, null, null, true);
-            }
-
-            if ($product->getTypeId() == 'grouped' || $product->getTypeId() == 'configurable')
-            {
-                if (count($sub_products) > 0)
-                {
-                    foreach ($sub_products as $sub_product)
+                    else
                     {
-                        $price = (double) Mage::helper('tax')->getPrice($sub_product, $sub_product->getFinalPrice(), null, null, null, null, $product->getStore(), null);
-
-                        $min = min($min, $price);
-                        $max = max($max, $price);
-                    }
-                }
-                else
-                    $min = $max; // avoid to have PHP_INT_MAX in case of no subproducts (Corner case of visibility and stock options)
-            }
-
-            if ($min != $max)
-            {
-                $customData['price']['default_formated'] = $product->getStore()->formatPrice($min, false) . ' - ' . $product->getStore()->formatPrice($max, false);
-
-                if ($this->config->isCustomerGroupsEnabled($product->getStoreId()))
-                {
-                    foreach ($groups as $group)
-                    {
-                        $group_id = (int)$group->getData('customer_group_id');
-
-                        $customData['price']['group_' . $group_id] = 0;
-                        $customData['price']['group_' . $group_id . '_formated'] = $product->getStore()->formatPrice($min, false) . ' - ' . $product->getStore()->formatPrice($max, false);
+                        $customData[$field]['group_' . $group_id] = $customData[$field]['default'];
+                        $customData[$field]['group_' . $group_id . '_formated'] = $customData[$field]['default_formated'];
                     }
                 }
 
-                //// Do not keep special price that is already taken into account in min max
-                unset($customData['price']['special_from_date']);
-                unset($customData['price']['special_to_date']);
-                unset($customData['price']['default_original_formated']);
-
-                $customData['price']['default'] = 0; // will be reset just after
+                $product->setCustomerGroupId(null);
             }
 
-            if ($customData['price']['default'] == 0)
+            $special_price = (double) Mage::helper('tax')->getPrice($product, $product->getFinalPrice(), $with_tax, null, null, null, $product->getStore(), null);
+
+            if ($special_price && $special_price !== $customData[$field]['default'])
             {
-                $customData['price']['default'] = $min;
+                $customData[$field]['special_from_date'] = strtotime($product->getSpecialFromDate());
+                $customData[$field]['special_to_date'] = strtotime($product->getSpecialToDate());
 
-                if ($min === $max)
-                    $customData['price']['default_formated'] = $product->getStore()->formatPrice($min, false);
+                $customData[$field]['default_original_formated'] = $customData[$field]['default_formated'];
 
-                if ($this->config->isCustomerGroupsEnabled($product->getStoreId()))
+                $customData[$field]['default'] = $special_price;
+                $customData[$field]['default_formated'] = $product->getStore()->formatPrice($special_price, false);
+            }
+
+            if ($type == 'configurable' || $type == 'grouped' || $type == 'bundle')
+            {
+                $min = PHP_INT_MAX;
+                $max = 0;
+
+                if ($type == 'bundle')
                 {
-                    foreach ($groups as $group)
-                    {
-                        $group_id = (int)$group->getData('customer_group_id');
-                        $customData['price']['group_' . $group_id] = $min;
+                    $_priceModel = $product->getPriceModel();
 
-                        if ($min === $max)
-                            $customData['price']['group_' . $group_id] = $product->getStore()->formatPrice($min, false);
+                    list($min, $max) = $_priceModel->getTotalPrices($product, null, $with_tax, true);
+                }
+
+                if ($type == 'grouped' || $type == 'configurable')
+                {
+                    if (count($sub_products) > 0)
+                    {
+                        foreach ($sub_products as $sub_product)
+                        {
+                            $price = (double) Mage::helper('tax')->getPrice($product, $sub_product->getFinalPrice(), $with_tax, null, null, null, $product->getStore(), null);
+
+                            $min = min($min, $price);
+                            $max = max($max, $price);
+                        }
+                    }
+                    else
+                        $min = $max; // avoid to have PHP_INT_MAX in case of no subproducts (Corner case of visibility and stock options)
+                }
+
+                if ($min != $max)
+                {
+                    $dashed_format = $product->getStore()->formatPrice($min, false) . ' - ' . $product->getStore()->formatPrice($max, false);
+                    $customData[$field]['default_formated'] = $dashed_format;
+
+                    if ($customer_groups_enabled)
+                    {
+                        foreach ($groups as $group)
+                        {
+                            $group_id = (int)$group->getData('customer_group_id');
+
+                            $customData[$field]['group_' . $group_id] = 0;
+                            $customData[$field]['group_' . $group_id . '_formated'] = $dashed_format;
+                        }
+                    }
+
+                    //// Do not keep special price that is already taken into account in min max
+                    unset($customData['price']['special_from_date']);
+                    unset($customData['price']['special_to_date']);
+                    unset($customData['price']['default_original_formated']);
+
+                    $customData[$field]['default'] = 0; // will be reset just after
+                }
+
+                if ($customData[$field]['default'] == 0)
+                {
+                    $customData[$field]['default'] = $min;
+
+                    if ($min === $max)
+                        $customData[$field]['default_formated'] = $product->getStore()->formatPrice($min, false);
+
+                    if ($customer_groups_enabled)
+                    {
+                        foreach ($groups as $group)
+                        {
+                            $group_id = (int)$group->getData('customer_group_id');
+                            $customData[$field]['group_' . $group_id] = $min;
+
+                            if ($min === $max)
+                                $customData[$field]['group_' . $group_id . '_formated'] = $customData[$field]['default_formated'];
+                        }
                     }
                 }
             }
@@ -379,8 +382,9 @@ class Algolia_Algoliasearch_Helper_Entity_Producthelper extends Algolia_Algolias
 
     public function getObject(Mage_Catalog_Model_Product $product)
     {
+        $type = $this->config->getMappedProductType($product->getTypeId());
         $this->logger->start('CREATE RECORD '.$product->getId(). ' '.$this->logger->getStoreName($product->storeId));
-        $this->logger->log('Product type ('.$product->getTypeId().')');
+        $this->logger->log('Product type ('.$product->getTypeId().', mapped to: ' . $type . ')');
         $defaultData    = array();
 
         $transport      = new Varien_Object($defaultData);
@@ -413,6 +417,7 @@ class Algolia_Algoliasearch_Helper_Entity_Producthelper extends Algolia_Algolias
             $categoryCollection = Mage::getResourceModel('catalog/category_collection')
                 ->addAttributeToSelect('name')
                 ->addAttributeToFilter('entity_id', $_categoryIds)
+                ->addFieldToFilter('level', array('gt' => 1))
                 ->addIsActiveFilter();
 
             foreach ($categoryCollection as $category)
@@ -475,24 +480,39 @@ class Algolia_Algoliasearch_Helper_Entity_Producthelper extends Algolia_Algolias
 
         if (false === isset($defaultData['thumbnail_url']))
         {
+            $thumb = Mage::helper('catalog/image')->init($product, 'thumbnail')->resize(75, 75);
+
             try
             {
-                $customData['thumbnail_url'] = $product->getThumbnailUrl();
+                $customData['thumbnail_url'] = $thumb->toString();
                 $customData['thumbnail_url'] = str_replace(array('https://', 'http://'
                 ), '//', $customData['thumbnail_url']);
             }
-            catch (\Exception $e) {}
+            catch (\Exception $e)
+            {
+                $this->logger->log($e->getMessage());
+                $this->logger->log($e->getTraceAsString());
+
+                $customData['thumbnail_url'] = str_replace(array('https://', 'http://'), '//', Mage::getDesign()->getSkinUrl($thumb->getPlaceholder()));
+            }
         }
 
         if (false === isset($defaultData['image_url']))
         {
+            $image = Mage::helper('catalog/image')->init($product, $this->config->getImageType())->resize($this->config->getImageWidth(), $this->config->getImageHeight());
+
             try
             {
-                $customData['image_url'] = Mage::getModel('catalog/product_media_config')->getMediaUrl($product->getImage());
+                $customData['image_url'] = $image->toString();
                 $customData['image_url'] = str_replace(array('https://', 'http://'), '//', $customData['image_url']);
             }
-            catch (\Exception $e) {}
+            catch (\Exception $e)
+            {
+                $this->logger->log($e->getMessage());
+                $this->logger->log($e->getTraceAsString());
 
+                $customData['image_url'] = str_replace(array('https://', 'http://'), '//', Mage::getDesign()->getSkinUrl($image->getPlaceholder()));
+            }
 
             if ($this->isAttributeEnabled($additionalAttributes, 'media_gallery'))
             {
@@ -508,9 +528,9 @@ class Algolia_Algoliasearch_Helper_Entity_Producthelper extends Algolia_Algolias
         $sub_products = null;
         $ids = null;
 
-        if ($product->getTypeId() == 'configurable' || $product->getTypeId() == 'grouped' || $product->getTypeId() == 'bundle')
+        if ($type == 'configurable' || $type == 'grouped' || $type == 'bundle')
         {
-            if ($product->getTypeId() == 'bundle')
+            if ($type == 'bundle')
             {
                 $ids = array();
 
@@ -520,7 +540,7 @@ class Algolia_Algoliasearch_Helper_Entity_Producthelper extends Algolia_Algolias
                     $ids[] = $option->product_id;
             }
 
-            if ($product->getTypeId() == 'configurable' || $product->getTypeId() == 'grouped')
+            if ($type == 'configurable' || $type == 'grouped')
                 $ids = $product->getTypeInstance(true)->getChildrenIds($product->getId());
 
             if (count($ids))
@@ -567,7 +587,7 @@ class Algolia_Algoliasearch_Helper_Entity_Producthelper extends Algolia_Algolias
                 if ($value === null)
                 {
                     /** Get values as array in children */
-                    if ($product->getTypeId() == 'configurable' || $product->getTypeId() == 'grouped' || $product->getTypeId() == 'bundle')
+                    if ($type == 'configurable' || $type == 'grouped' || $type == 'bundle')
                     {
                         $values = array();
 
@@ -591,7 +611,7 @@ class Algolia_Algoliasearch_Helper_Entity_Producthelper extends Algolia_Algolias
                             }
                         }
 
-                        if (count($values) > 0)
+                        if (is_array($values) && count($values) > 0)
                         {
                             $customData[$attribute['attribute']] = array_values(array_unique($values));
                         }
@@ -619,24 +639,13 @@ class Algolia_Algoliasearch_Helper_Entity_Producthelper extends Algolia_Algolias
 
         $this->handlePrice($product, $sub_products, $customData);
 
-        if ($this->config->isCustomerGroupsEnabled())
-        {
-            $groups = Mage::getModel('customer/group')->getCollection();
-
-            foreach ($groups as $group)
-            {
-                $group_id = (int)$group->getData('customer_group_id');
-                $this->handlePrice($product, $sub_products, $customData, $groups, $group_id);
-            }
-        }
-
         $transport = new Varien_Object($customData);
         Mage::dispatchEvent('algolia_subproducts_index', array('custom_data' => $transport, 'sub_products' => $sub_products));
         $customData = $transport->getData();
 
         $customData = array_merge($customData, $defaultData);
 
-        $customData['type_id'] = $product->getTypeId();
+        $customData['type_id'] = $type;
 
         $this->castProductObject($customData);
 
