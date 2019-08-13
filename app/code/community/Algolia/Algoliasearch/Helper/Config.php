@@ -200,15 +200,20 @@ class Algolia_Algoliasearch_Helper_Config extends Mage_Core_Helper_Abstract
 
         $group_id = Mage::getSingleton('customer/session')->getCustomerGroupId();
 
-        $suffix_index_name = '';
-
-        if ($this->isCustomerGroupsEnabled($storeId))
-        {
-            $suffix_index_name = '_group_' . $group_id;
-        }
-
         foreach ($attrs as &$attr)
-            $attr['index_name'] = $product_helper->getIndexName($storeId).$suffix_index_name.'_'.$attr['attribute'].'_'.$attr['sort'];
+        {
+            if ($this->isCustomerGroupsEnabled($storeId))
+            {
+                if (strpos($attr['attribute'], 'price') !== false)
+                {
+                    $suffix_index_name = 'group_' . $group_id;
+
+                    $attr['index_name'] = $product_helper->getIndexName($storeId) . '_' . $suffix_index_name . '_' .$attr['attribute'].'_'.$attr['sort'];
+                }
+            }
+            else
+                $attr['index_name'] = $product_helper->getIndexName($storeId) . '_' . 'default' . '_' .$attr['attribute'].'_'.$attr['sort'];
+        }
 
         if (is_array($attrs))
             return $attrs;

@@ -11,13 +11,15 @@ $isSearchPage = false;;
 $hash_path = null;
 
 $group_id = Mage::getSingleton('customer/session')->getCustomerGroupId();
-
-$suffix_index_name = '';
+$price_key = '.default';
 
 if ($config->isCustomerGroupsEnabled(Mage::app()->getStore()->getStoreId()))
 {
-    $suffix_index_name = '_group_' . $group_id;
+    $price_key = '.'.$group_id;
 }
+
+$title = '';
+$content = '';
 
 /**
  * Handle category replacement
@@ -26,9 +28,17 @@ if($config->isInstantEnabled() && $config->replaceCategories() && Mage::app()->g
 {
     $category = Mage::registry('current_category');
 
-    if ($category)
+    if ($category && $category->getDisplayMode() !== 'PAGE')
     {
         $category->getUrlInstance()->setStore(Mage::app()->getStore()->getStoreId());
+
+        if ($category->getDisplayMode() == 'PRODUCTS_AND_PAGE')
+        {
+            $page       = $category->getLandingPage();
+            $cms_block  = Mage::getModel('cms/block')->load($page);
+            $title      = $cms_block->getTitle();
+            $content    = $cms_block->getContent();
+        }
 
         $path = '';
 
@@ -40,7 +50,7 @@ if($config->isInstantEnabled() && $config->replaceCategories() && Mage::app()->g
             $path .= $product_helper->getCategoryName($treeCategoryId, Mage::app()->getStore()->getStoreId());
         }
 
-        $indexName = $product_helper->getIndexName(Mage::app()->getStore()->getStoreId()).$suffix_index_name;
+        $indexName = $product_helper->getIndexName(Mage::app()->getStore()->getStoreId());
         $category_url = $category->getUrl($category);
         $hash_path = '#q=&page=0&refinements=%5B%7B%22categories%22%3A%5B%22'.$path.'%22%5D%7D%5D&numerics_refinements=%7B%7D&index_name=%22'.$indexName.'%22';
 
@@ -57,14 +67,14 @@ if ($config->isInstantEnabled())
 
     if ($pageIdentifier === 'catalogsearch_result_index')
     {
-        $query = Mage::app()->getRequest()->getParam('q');
+        $query = $catalogSearchHelper->getEscapedQueryText();
 
         if ($query == '__empty__')
             $query = '';
 
         $product_helper = Mage::helper('algoliasearch/entity_producthelper');
 
-        $hash_path = '#q='.$query.'&page=0&refinements=%5B%5D&numerics_refinements=%7B%7D&index_name=%22'.$product_helper->getIndexName().$suffix_index_name.'%22';
+        $hash_path = '#q='.htmlentities($query).'&page=0&refinements=%5B%5D&numerics_refinements=%7B%7D&index_name=%22'.$product_helper->getIndexName().'%22';
 
         $refinement_key = Mage::app()->getRequest()->getParam('refinement_key');
         $refinement_value = Mage::app()->getRequest()->getParam('refinement_value');
@@ -159,18 +169,18 @@ $class = $isSearchPage ? 'search-page' : '';
         {{#thumbnail_url}}
         <div class="thumb"><img src="{{thumbnail_url}}" /></div>
         {{/thumbnail_url}}
-        {{#price_with_tax}}
+        {{#price_with_tax<?php echo $price_key; ?>}}
         <div class="algoliasearch-autocomplete-price">
-            {{#special_price_with_tax}}
+            {{#special_price_with_tax<?php echo $price_key; ?>}}
             <div class="after_special">
-                {{special_price_with_tax_formated}}
+                {{special_price_with_tax_formated<?php echo $price_key; ?>}}
             </div>
-            {{/special_price_with_tax}}
-            <div {{#special_price_with_tax}}class="before_special"{{/special_price_with_tax}}>
-            {{price_with_tax_formated}}
+            {{/special_price_with_tax<?php echo $price_key; ?>}}
+            <div {{#special_price_with_tax<?php echo $price_key; ?>}}class="before_special"{{/special_price_with_tax<?php echo $price_key; ?>}}>
+            {{price_with_tax_formated<?php echo $price_key; ?>}}
             </div>
         </div>
-        {{/price_with_tax}}
+        {{/price_with_tax<?php echo $price_key; ?>}}
         <div class="info">
             {{{_highlightResult.name.value}}}
 
@@ -263,25 +273,33 @@ $class = $isSearchPage ? 'search-page' : '';
 
         <div class="row">
             <div class="col-md-offset-3 col-md-9">
-                {{#second_bar}}
-                <div id="instant-search-bar-container">
-                    <div id="instant-search-box">
-                        <label for="instant-search-bar">
-                            <?php echo $this->__('Search :'); ?>
-                        </label>
-
-                        <input value="<?php echo $catalogSearchHelper->getEscapedQueryText() ?>" placeholder="<?php echo $this->__('Search for products'); ?>" id="instant-search-bar" type="text" autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off" />
-
-                        <svg xmlns="http://www.w3.org/2000/svg" class="magnifying-glass" width="24" height="24" viewBox="0 0 128 128">
-                            <g transform="scale(4)">
-                                <path stroke-width="3" d="M19.5 19.582l9.438 9.438"></path>
-                                <circle stroke-width="3" cx="12" cy="12" r="10.5" fill="none"></circle>
-                                <path d="M23.646 20.354l-3.293 3.293c-.195.195-.195.512 0 .707l7.293 7.293c.195.195.512.195.707 0l3.293-3.293c.195-.195.195-.512 0-.707l-7.293-7.293c-.195-.195-.512-.195-.707 0z"></path>
-                            </g>
-                        </svg>
+                <div id="algolia-static-content">
+                    <div class="page-title category-title">
+                        <h1><?php echo $title; ?></h1>
                     </div>
+                    <?php echo $content; ?>
                 </div>
-                {{/second_bar}}
+                <div>
+                    {{#second_bar}}
+                    <div id="instant-search-bar-container">
+                        <div id="instant-search-box">
+                            <label for="instant-search-bar">
+                                <?php echo $this->__('Search :'); ?>
+                            </label>
+
+                            <input value="<?php echo $catalogSearchHelper->getEscapedQueryText() ?>" placeholder="<?php echo $this->__('Search for products'); ?>" id="instant-search-bar" type="text" autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off" />
+
+                            <svg xmlns="http://www.w3.org/2000/svg" class="magnifying-glass" width="24" height="24" viewBox="0 0 128 128">
+                                <g transform="scale(4)">
+                                    <path stroke-width="3" d="M19.5 19.582l9.438 9.438"></path>
+                                    <circle stroke-width="3" cx="12" cy="12" r="10.5" fill="none"></circle>
+                                    <path d="M23.646 20.354l-3.293 3.293c-.195.195-.195.512 0 .707l7.293 7.293c.195.195.512.195.707 0l3.293-3.293c.195-.195.195-.512 0-.707l-7.293-7.293c-.195-.195-.512-.195-.707 0z"></path>
+                                </g>
+                            </svg>
+                        </div>
+                    </div>
+                    {{/second_bar}}
+                </div>
             </div>
         </div>
 
@@ -349,28 +367,27 @@ $class = $isSearchPage ? 'search-page' : '';
                                 <div class="price">
                                     <div class="algoliasearch-autocomplete-price">
                                         <div>
-                                            {{#special_price_with_tax}}
+                                            {{#special_price_with_tax<?php echo $price_key; ?>}}
                                             <span class="after_special">
-                                                {{special_price_with_tax_formated}}
+                                                {{special_price_with_tax_formated<?php echo $price_key; ?>}}
                                             </span>
-                                            {{/special_price_with_tax}}
+                                            {{/special_price_with_tax<?php echo $price_key; ?>}}
 
-                                            {{#special_price_with_tax}}
+                                            {{#special_price_with_tax<?php echo $price_key; ?>}}
                                             <span class="before_special">
-                                            {{/special_price_with_tax}}
+                                            {{/special_price_with_tax<?php echo $price_key; ?>}}
 
-                                            {{#price_with_tax}}{{price_with_tax_formated}}{{/price_with_tax}}
-                                            {{^price_with_tax}}
-                                            {{#min_with_tax_formated}}
-                                            {{min_with_tax_formated}} - {{max_with_tax_formated}}
-                                            {{/min_with_tax_formated}}
-                                            {{^min_with_tax_formated}}-{{/min_with_tax_formated}}
-                                            {{/price_with_tax}}
+                                            {{#price_with_tax<?php echo $price_key; ?>}}{{price_with_tax_formated<?php echo $price_key; ?>}}{{/price_with_tax<?php echo $price_key; ?>}}
+                                            {{^price_with_tax<?php echo $price_key; ?>}}
+                                            {{#min_with_tax_formated<?php echo $price_key; ?>}}
+                                            {{min_with_tax_formated<?php echo $price_key; ?>}} - {{max_with_tax_formated<?php echo $price_key; ?>}}
+                                            {{/min_with_tax_formated<?php echo $price_key; ?>}}
+                                            {{^min_with_tax_formated<?php echo $price_key; ?>}}-{{/min_with_tax_formated<?php echo $price_key; ?>}}
+                                            {{/price_with_tax<?php echo $price_key; ?>}}
 
-                                            {{#special_price_with_tax}}
+                                            {{#special_price_with_tax<?php echo $price_key; ?>}}
                                             </span>
-                                            {{/special_price_with_tax}}
-
+                                            {{/special_price_with_tax<?php echo $price_key; ?>}}
 
                                         </div>
                                     </div>
@@ -412,7 +429,7 @@ $class = $isSearchPage ? 'search-page' : '';
 <script type="text/template" id="instant-facets-hierarchical-template">
     {{#data}}
         <div style="padding-left: 10px; padding-right: 0px;" class="hierarchical_facet">
-            <div data-name="{{attribute}}" data-path="{{path}}" data-type="hierarchical" class="{{#isRefined}}checked {{/isRefined}}sub_facet hierarchical">
+            <div data-name="{{attribute}}" data-path="{{path}}" data-type="hierarchical" class="{{#isRefined}}checked {{/isRefined}}sub_facet hierarchical {{#empty}}empty{{/empty}}">
                     <input style="display: none;" data-attribute="{{attribute}}" {{#isRefined}}checked{{/isRefined}} data-name="{{name}}" class="facet_value" type="checkbox" />
                     {{name}}
                     {{#count}}<span class="count">{{count}}</span>{{/count}}
@@ -557,7 +574,6 @@ $class = $isSearchPage ? 'search-page' : '';
             },
             applicationId: '<?php echo $config->getApplicationID() ?>',
             indexName: '<?php echo $product_helper->getBaseIndexName(); ?>',
-            suffixIndexName: '<?php echo $suffix_index_name; ?>',
             apiKey: '<?php echo $config->getSearchOnlyAPIKey() ?>',
             facets: <?php echo json_encode($config->getFacets()); ?>,
             hitsPerPage: <?php echo (int) $config->getNumberOfProductResults() ?>,
@@ -643,20 +659,22 @@ $class = $isSearchPage ? 'search-page' : '';
             }
         }
 
-        var helper = algoliaBundle.algoliasearchHelper(algolia_client, algoliaConfig.indexName + '_products' + algoliaConfig.suffixIndexName, {
+        var helper = algoliaBundle.algoliasearchHelper(algolia_client, algoliaConfig.indexName + '_products', {
             facets: conjunctive_facets,
             disjunctiveFacets: disjunctive_facets,
             hierarchicalFacets: hierarchical_facets,
-            hitsPerPage: algoliaConfig.hitsPerPage
+            hitsPerPage: algoliaConfig.hitsPerPage,
+            analyticsTags: 'instant-search'
         });
 
         helper.setQuery('');
 
-        var helper_empty = algoliaBundle.algoliasearchHelper(algolia_client, algoliaConfig.indexName + '_products' + algoliaConfig.suffixIndexName, {
+        var helper_empty = algoliaBundle.algoliasearchHelper(algolia_client, algoliaConfig.indexName + '_products', {
             facets: conjunctive_facets,
             disjunctiveFacets: disjunctive_facets_empty,
             hierarchicalFacets: hierarchical_facets,
-            hitsPerPage: algoliaConfig.hitsPerPage
+            hitsPerPage: algoliaConfig.hitsPerPage,
+            analyticsTags: 'instant-search'
         });
 
         helper_empty.setQuery('');
@@ -771,6 +789,8 @@ $class = $isSearchPage ? 'search-page' : '';
                 var numericsRefinements             = JSON.parse(decodeURIComponent(params.substring(numericsRefinementsParamOffset + '&numerics_refinements='.length, indexNameOffset)));
                 var indexName                       = JSON.parse(decodeURIComponent(params.substring(indexNameOffset + '&index_name='.length)));
 
+                q = $("<div/>").html(q).text();
+
                 helper.setQuery(q);
 
                 helper.clearRefinements();
@@ -780,6 +800,7 @@ $class = $isSearchPage ? 'search-page' : '';
                     for (var refine in refinements[i]) {
                         for (var j = 0; j < refinements[i][refine].length; j++) {
                             helper.toggleRefine(refine, refinements[i][refine][j]);
+                            helper_empty.toggleRefine(refine, refinements[i][refine][j]);
                         }
                     }
                 }
@@ -1017,28 +1038,30 @@ $class = $isSearchPage ? 'search-page' : '';
             var hogan_objs = [];
 
             var indices = ['categories', 'products', 'pages'];
-            var indices_with_suffix  = ['categories', 'products' + algoliaConfig.suffixIndexName, 'pages'];
+            var indices_with_suffix  = ['categories', 'products', 'pages'];
 
             if (algoliaConfig.autocomplete.hitsPerPage['suggestions'] > 0)
             {
                 var suggestions_index = algolia_client.initIndex(algoliaConfig.indexName + "_suggestions");
-                var products_index = algolia_client.initIndex(algoliaConfig.indexName + "_products" + algoliaConfig.suffixIndexName);
+                var products_index = algolia_client.initIndex(algoliaConfig.indexName + "_products");
 
                 hogan_objs.push({
                     displayKey: 'query',
                     source: function (query, cb) {
                         suggestions_index.search(query, {
-                            hitsPerPage: algoliaConfig.autocomplete.hitsPerPage['suggestions']
+                            hitsPerPage: algoliaConfig.autocomplete.hitsPerPage['suggestions'],
+                            analyticsTags: 'autocomplete'
                         }, function (err, content) {
                             if (err)
                                 return;
 
                             if (content.hits.length > 0) {
                                 products_index.search(content.hits[0].query, {
-                                    facets: ['categories'],
+                                    facets: ['categories.level0'],
                                     hitsPerPage: 0,
                                     typoTolerance: false,
-                                    maxValuesPerFacet: 3
+                                    maxValuesPerFacet: 3,
+                                    analyticsTags: 'instant-search'
                                 }, function (err2, content2) {
 
                                     if (err2)
@@ -1051,14 +1074,14 @@ $class = $isSearchPage ? 'search-page' : '';
 
                                     var categories = {};
 
-                                    if (content2.facets.categories) {
+                                    if (content2.facets['categories.level0']) {
 
                                         var obj = $.extend(true, {}, content.hits[0]);
                                         obj.category = '<?php echo $this->__('All departments') ?>';
                                         obj.url = '<?php echo $base_url; ?>/catalogsearch/result/?q=' + obj.query;
                                         hits.push(obj);
 
-                                        for (var key in content2.facets.categories) {
+                                        for (var key in content2.facets['categories.level0']) {
 
                                             var explode = key.split(' /// ');
                                             var nameattr = explode[0];
@@ -1070,7 +1093,7 @@ $class = $isSearchPage ? 'search-page' : '';
                                         {
                                             var obj = $.extend(true, {}, content.hits[0]);
                                             obj.category = key;
-                                            obj.url = '<?php echo $base_url; ?>?category=1#q=' + obj.query + '&page=0&refinements=%5B%7B%22categories%22%3A%5B%22' + obj.category + '%22%5D%7D%5D&numerics_refinements=%7B%7D&index_name=%22<?php echo $product_helper->getBaseIndexName(); ?>_products%22';
+                                            obj.url = '<?php echo $base_url; ?>/catalogsearch/result/?q=' + obj.query + '#q=' + obj.query + '&page=0&refinements=%5B%7B%22categories%22%3A%5B%22' + obj.category + '%22%5D%7D%5D&numerics_refinements=%7B%7D&index_name=%22<?php echo $product_helper->getBaseIndexName(); ?>_products%22';
                                             hits.push(obj);
                                         }
                                     }
@@ -1117,7 +1140,8 @@ $class = $isSearchPage ? 'search-page' : '';
                         source: (function (index, i) {
                                 return function (query, cb) {
                                     index.search(query, {
-                                        hitsPerPage: algoliaConfig.autocomplete.hitsPerPage[indices[i]]
+                                        hitsPerPage: algoliaConfig.autocomplete.hitsPerPage[indices[i]],
+                                        analyticsTags: 'autocomplete'
                                     }, function (err, content) {
                                         if (err)
                                         {
@@ -1191,7 +1215,8 @@ $class = $isSearchPage ? 'search-page' : '';
                     source: (function (index, i) {
                         return function (query, cb) {
                             index.search(query, {
-                                hitsPerPage: algoliaConfig.autocomplete.additionnalSection[i].hitsPerPage
+                                hitsPerPage: algoliaConfig.autocomplete.additionnalSection[i].hitsPerPage,
+                                analyticsTags: 'autocomplete'
                             }, function (err, content) {
                                 if (err)
                                 {
@@ -1261,7 +1286,7 @@ $class = $isSearchPage ? 'search-page' : '';
             if ($(algoliaConfig.instant.selector).length !== 1)
                 throw '[Algolia] Invalid instant-search selector: ' + algoliaConfig.instant.selector;
 
-            if ($(algoliaConfig.instant.selector).find(algoliaConfig.autocomplete.selector).length > 0)
+            if (algoliaConfig.autocomplete.enabled && $(algoliaConfig.instant.selector).find(algoliaConfig.autocomplete.selector).length > 0)
                 throw '[Algolia] You can\'t have a search input matching "' + algoliaConfig.autocomplete.selector +
                 '" inside you instant selector "' + algoliaConfig.instant.selector + '"';
 
@@ -1464,7 +1489,10 @@ $class = $isSearchPage ? 'search-page' : '';
                         helper.state.clearRefinements($(this).attr("data-attribute"));
 
                     if ($(this).attr("data-name") != "all")
+                    {
                         helper.toggleRefine($(this).attr("data-attribute"), $(this).attr("data-name"));
+                        helper_empty.toggleRefine($(this).attr("data-attribute"), $(this).attr("data-name"));
+                    }
                 });
 
                 performQueries(true);
@@ -1482,6 +1510,7 @@ $class = $isSearchPage ? 'search-page' : '';
                 }
 
                 helper.toggleRefine($(this).attr("data-name"), $(this).attr('data-path'));
+                helper_empty.toggleRefine($(this).attr("data-name"), $(this).attr('data-path'));
 
                 performQueries(true);
             });
@@ -1499,6 +1528,7 @@ $class = $isSearchPage ? 'search-page' : '';
                     $(this).prop("checked", !$(this).prop("checked"));
 
                     helper.toggleRefine($(this).attr("data-attribute"), $(this).attr("data-name"));
+                    helper_empty.toggleRefine($(this).attr("data-attribute"), $(this).attr("data-name"));
                 });
 
                 performQueries(true);
