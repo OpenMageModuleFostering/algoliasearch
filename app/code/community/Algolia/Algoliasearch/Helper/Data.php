@@ -23,7 +23,7 @@ class Algolia_Algoliasearch_Helper_Data extends Mage_Core_Helper_Abstract
 
     public function __construct()
     {
-        \AlgoliaSearch\Version::$custom_value = " Magento (1.4.5)";
+        \AlgoliaSearch\Version::$custom_value = " Magento (1.4.6)";
 
         $this->algolia_helper               = Mage::helper('algoliasearch/algoliahelper');
 
@@ -36,9 +36,13 @@ class Algolia_Algoliasearch_Helper_Data extends Mage_Core_Helper_Abstract
         $this->config                       = Mage::helper('algoliasearch/config');
     }
 
-    public function deleteProductsAndCategoriesStoreIndices($storeId = null)
+    public function deleteProductsStoreIndices($storeId = null)
     {
         $this->algolia_helper->deleteIndex($this->product_helper->getIndexName($storeId));
+    }
+
+    public function deleteCategoriesStoreIndices($storeId = null)
+    {
         $this->algolia_helper->deleteIndex($this->category_helper->getIndexName($storeId));
     }
 
@@ -152,6 +156,8 @@ class Algolia_Algoliasearch_Helper_Data extends Mage_Core_Helper_Abstract
 
     public function rebuildStorePageIndex($storeId)
     {
+        $emulationInfo = $this->startEmulation($storeId);
+
         $index_name = $this->page_helper->getIndexName($storeId);
 
         $pages = $this->page_helper->getPages($storeId);
@@ -162,6 +168,8 @@ class Algolia_Algoliasearch_Helper_Data extends Mage_Core_Helper_Abstract
         $this->algolia_helper->moveIndex($index_name.'_tmp', $index_name);
 
         $this->algolia_helper->setSettings($index_name, $this->page_helper->getIndexSettings($storeId));
+
+        $this->stopEmulation($emulationInfo);
     }
 
     public function rebuildStoreCategoryIndex($storeId, $categoryIds = null)
@@ -361,9 +369,12 @@ class Algolia_Algoliasearch_Helper_Data extends Mage_Core_Helper_Abstract
 
         $collection = clone $collectionDefault;
         $collection->setCurPage($page)->setPageSize($pageSize);
-        $collection->load();
         $collection->addCategoryIds();
         $collection->addUrlRewrite();
+        $collection->joinField('stock_qty', 'cataloginventory/stock_item', 'qty', 'product_id=entity_id', '{{table}}.stock_id=1', 'left');
+        $collection->getSelect()->columns('sku, (SELECT SUM(qty_ordered) FROM sales_flat_order_item WHERE sales_flat_order_item.sku = e.sku) as ordered_qty');
+        $collection->getSelect()->columns('(SELECT rating_summary FROM review_entity_summary WHERE review_entity_summary.entity_pk_value = e.entity_id AND review_entity_summary.store_id='.$storeId.') as rating_summary');
+        $collection->load();
 
         $index_name = $this->product_helper->getIndexName($storeId);
 
