@@ -33,8 +33,14 @@
                     <sort_order>10</sort_order>
                     <show_in_default>1</show_in_default>
                     <show_in_website>1</show_in_website>
-                    <show_in_store>1</show_in_store>
+                    <show_in_store>1</show_in_store>  
                     <expanded>1</expanded>
+                    <comment>
+                     <![CDATA[
+                     <font size="2"> Watch the <a href="https://youtu.be/DUuv9ALS5cM?t=213" target="_blank"><font color="#0066cc">Tutorial</font></a><br /n> 
+                    </font>
+                     ]]>
+                    </comment>
                     <fields>
                         <application_id translate="label">
                             <label>Application ID</label>
@@ -96,20 +102,73 @@
                             <show_in_store>1</show_in_store>
                             <comment>
                                 <![CDATA[
-                                If set to Yes, the products inside the results pages will be searchable with the as-you-type display of the refined results. It requires your theme to expose a <code>top.search</code> template.
+                                If set to Yes, the products inside the results pages will be searchable the refined results updated as-you-type. It requires your theme to expose a <code>top.search</code> template.
                                 ]]>
                             </comment>
                         </is_instant_enabled>
                     </fields>
                 </credentials>
-                <instant>
-                    <label>Instant Search Results Page Configuration</label>
+                <products translate="label">
+                    <label>Product Search Configuration</label>
                     <frontend_type>text</frontend_type>
-                    <sort_order>21</sort_order>
+                    <sort_order>30</sort_order>
                     <show_in_default>1</show_in_default>
                     <show_in_website>1</show_in_website>
                     <show_in_store>1</show_in_store>
                     <expanded>1</expanded>
+                    <comment>
+                     <![CDATA[
+                     <font size="2"> Watch the <a href="https://youtu.be/DUuv9ALS5cM?t=398" target="_blank"><font color="#0066cc">Tutorial</font></a><br /n> 
+                    </font>
+                     ]]>
+                    </comment>
+                    <fields>
+                        <product_additional_attributes translate="label comment">
+                            <label>Attributes</label>
+                            <frontend_model>algoliasearch/system_config_form_field_customsortorderproduct</frontend_model>
+                            <backend_model>adminhtml/system_config_backend_serialized_array</backend_model>
+                            <sort_order>10</sort_order>
+                            <show_in_default>1</show_in_default>
+                            <show_in_website>1</show_in_website>
+                            <show_in_store>1</show_in_store>
+                            <comment>
+                                <![CDATA[
+                                Choose here the product attributes your users can search on, the ones you want to use as filters and sorts options and the ones required to display the search results. The order of the searchable attributes matters: a query matching the first searchable attribute of a product will put this product before the others in the results. Chose "Ordered" if you want the position of the matching word(s) inside the attribute to matter. A match at the beginning of an attribute will be considered more important: for the query "iPhone", "iPhone 5s" will be ranked before "case for iPhone".<br />
+                                <span style="color: #D83900">&#9888;</span> Do not forget to reindex your Algolia Search index after you've modified this panel.
+                                ]]>
+                            </comment>
+                        </product_additional_attributes>
+                        <custom_ranking_product_attributes translate="label comment">
+                            <label>Ranking</label>
+                            <frontend_model>algoliasearch/system_config_form_field_customrankingproduct</frontend_model>
+                            <backend_model>adminhtml/system_config_backend_serialized_array</backend_model>
+                            <sort_order>12</sort_order>
+                            <show_in_default>1</show_in_default>
+                            <show_in_website>1</show_in_website>
+                            <show_in_store>1</show_in_store>
+                            <comment>
+                                <![CDATA[
+                                Configure here the attributes that reflect the popularity of your product (number of orders, number of likes, number of views, ...).<br />
+                                <span style="color: #D83900">&#9888;</span> All attributes used here must be have been initially included in the Attributes configuration panel.
+                                ]]>
+                            </comment>
+                        </custom_ranking_product_attributes>
+                    </fields>
+                </products>
+                <instant>
+                    <label>Instant Search Results Page Configuration</label>
+                    <frontend_type>text</frontend_type>
+                    <sort_order>31</sort_order>
+                    <show_in_default>1</show_in_default>
+                    <show_in_website>1</show_in_website>
+                    <show_in_store>1</show_in_store>
+                    <expanded>1</expanded>
+                    <comment>
+                     <![CDATA[
+                     <font size="2"> Watch the <a href="https://youtu.be/DUuv9ALS5cM?t=666" target="_blank"><font color="#0066cc">Tutorial</font></a><br /n> 
+                    </font>
+                     ]]>
+                    </comment>
                     <fields>
                         <instant_selector translate="label comment">
                             <label>DOM Selector</label>
@@ -128,7 +187,7 @@
                             <show_in_default>1</show_in_default>
                             <show_in_website>1</show_in_website>
                             <show_in_store>1</show_in_store>
-                            <comment>Configure here the filtering options you want to display on your search results page sidebar. Choose Disjunctive to allow the selection of different value of a facet (e.g., hotels with 4 OR 5 stars). Choose Conjunctive to allow the selection of only one value of a facet (e.g., only "Size M"). (</comment>
+                            <comment>Configure here the filtering options you want to display on your search results page. Choose Disjunctive to allow the selection of different values of a facet (e.g. hotels with 4 OR 5 stars). Choose Conjunctive to allow the selection of only one value of a facet (e.g. only "Size M").</comment>
                         </facets>
                         <sorts>
                             <label>Sorts</label>
@@ -148,51 +207,10 @@
                             <show_in_default>1</show_in_default>
                             <show_in_website>1</show_in_website>
                             <show_in_store>1</show_in_store>
-                            <comment>Choose here if you want the default category pages to be replaced by the instant-search results page when a category is selected either in the menu of categories or in the drop-down menu.</comment>
+                            <comment>Choose here if you want the default Magento category pages to be replaced by an instant-search results page when a category is selected either in the menu of categories or in the drop-down menu.</comment>
                         </replace_categories>
                     </fields>
                 </instant>
-                <products translate="label">
-                    <label>Product Search Configuration</label>
-                    <frontend_type>text</frontend_type>
-                    <sort_order>30</sort_order>
-                    <show_in_default>1</show_in_default>
-                    <show_in_website>1</show_in_website>
-                    <show_in_store>1</show_in_store>
-                    <expanded>1</expanded>
-                    <fields>
-                        <product_additional_attributes translate="label comment">
-                            <label>Attributes</label>
-                            <frontend_model>algoliasearch/system_config_form_field_customsortorderproduct</frontend_model>
-                            <backend_model>adminhtml/system_config_backend_serialized_array</backend_model>
-                            <sort_order>10</sort_order>
-                            <show_in_default>1</show_in_default>
-                            <show_in_website>1</show_in_website>
-                            <show_in_store>1</show_in_store>
-                            <comment>
-                                <![CDATA[
-                                Choose here the attributes your users can search in and the ones you want to display in the search results. The order of these attributes matters: the higher in the list, the more important to rank the results. A match of a query in the first attribute of a product will put this product before the others in the results. Chose "Ordered" if you want the position of the matched word(s) inside the attribute to matter. A match at the beginning of an attribute will be considered more important: "iPhone 5s" will be ranked before "case for iPhone" for the query "iPhone".<br />
-                                <span style="color: #D83900">&#9888;</span> <code>Retrievable</code> need to be set to <code>Yes</code> in order to be displayed.
-                                ]]>
-                            </comment>
-                        </product_additional_attributes>
-                        <custom_ranking_product_attributes translate="label comment">
-                            <label>Ranking</label>
-                            <frontend_model>algoliasearch/system_config_form_field_customrankingproduct</frontend_model>
-                            <backend_model>adminhtml/system_config_backend_serialized_array</backend_model>
-                            <sort_order>12</sort_order>
-                            <show_in_default>1</show_in_default>
-                            <show_in_website>1</show_in_website>
-                            <show_in_store>1</show_in_store>
-                            <comment>
-                                <![CDATA[
-                                Configure here the attributes that reflect the popularity of your product (number of orders, number of likes, number of views, ...).<br />
-                                <span style="color: #D83900">&#9888;</span> All attributes used here must be included in the Attributes configuration.
-                                ]]>
-                            </comment>
-                        </custom_ranking_product_attributes>
-                    </fields>
-                </products>
                 <categories translate="label">
                     <label>Category Search Configuration</label>
                     <frontend_type>text</frontend_type>
@@ -201,6 +219,12 @@
                     <show_in_website>1</show_in_website>
                     <show_in_store>1</show_in_store>
                     <expanded>1</expanded>
+                    <comment>
+                     <![CDATA[
+                     <font size="2"> Watch the <a href="https://youtu.be/DUuv9ALS5cM?t=805" target="_blank"><font color="#0066cc">Tutorial</font></a><br /n> 
+                    </font>
+                     ]]>
+                    </comment>
                     <fields>
                         <category_additional_attributes2 translate="label comment">
                             <label>Attributes</label>
@@ -210,7 +234,12 @@
                             <show_in_default>1</show_in_default>
                             <show_in_website>1</show_in_website>
                             <show_in_store>1</show_in_store>
-                            <comment>Configure here the attributes your users can search in. The order of these attributes matters: the higher in the list, the more important to rank the results.</comment>
+                            <comment>
+                                <![CDATA[
+                                Configure here the category attributes your users can search on. The order of these attributes matters: the higher in the list, the more important to rank the results.<br />
+                                <span style="color: #D83900">&#9888;</span> Do not forget to reindex your Algolia Search index after you've modified this panel.
+                                ]]>
+                            </comment>
                         </category_additional_attributes2>
                         <custom_ranking_category_attributes translate="label comment">
                             <label>Ranking</label>
@@ -222,8 +251,8 @@
                             <show_in_store>1</show_in_store>
                             <comment>
                                 <![CDATA[
-                                Configure here the attributes that reflect the popularity of your categories (number of products, number total sales of the category, ...).<br />
-                                <span style="color: #D83900">&#9888;</span> All attributes used here must be included in the Attributes configuration.
+                                Choose here the attributes that reflect the popularity of your categories (number of products, total number of sales of the category,etc.).<br />
+                                <span style="color: #D83900">&#9888;</span> All attributes used here must be have been included before in the Attributes chart.
                                 ]]>
                             </comment>
                         </custom_ranking_category_attributes>
@@ -237,6 +266,12 @@
                     <show_in_website>1</show_in_website>
                     <show_in_store>1</show_in_store>
                     <expanded>1</expanded>
+                    <comment>
+                     <![CDATA[
+                     <font size="2"> Watch the <a href="https://youtu.be/DUuv9ALS5cM?t=841" target="_blank"><font color="#0066cc">Tutorial</font></a><br /n> 
+                    </font>
+                     ]]>
+                    </comment>
                     <fields>
                         <excluded_pages translate="label comment">
                             <label>Excluded Pages</label>
@@ -246,7 +281,12 @@
                             <show_in_default>1</show_in_default>
                             <show_in_website>1</show_in_website>
                             <show_in_store>1</show_in_store>
-                            <comment>Configure here the pages you don't want to search in.</comment>
+                            <comment>
+                                <![CDATA[
+                                Configure here the pages you don't want to search in.<br /n>
+                                <span style="color: #D83900">&#9888;</span> Do not forget to reindex your Algolia Search Pages index whenever you modify this setting.
+                                ]]>
+                            </comment>
                         </excluded_pages>
                     </fields>
                 </pages>
@@ -258,6 +298,12 @@
                     <show_in_website>1</show_in_website>
                     <show_in_store>1</show_in_store>
                     <expanded>1</expanded>
+                    <comment>
+                     <![CDATA[
+                     <font size="2"> Watch the <a href="https://youtu.be/DUuv9ALS5cM?t=881" target="_blank"><font color="#0066cc">Tutorial</font></a><br /n> 
+                    </font>
+                     ]]>
+                    </comment>
                     <fields>
                         <min_popularity translate="label comment">
                             <label>Min popularity</label>
@@ -267,7 +313,7 @@
                             <show_in_default>1</show_in_default>
                             <show_in_website>1</show_in_website>
                             <show_in_store>1</show_in_store>
-                            <comment>The min popularity a query suggestion needs in order to be indexed. Default value is 4.</comment>
+                            <comment>The min number of times a query has been performed in order to be suggested. Default value is 4.</comment>
                         </min_popularity>
                         <min_number_of_results translate="label comment">
                             <label>Min number of products</label>
@@ -277,7 +323,12 @@
                             <show_in_default>1</show_in_default>
                             <show_in_website>1</show_in_website>
                             <show_in_store>1</show_in_store>
-                            <comment>The min number of results a query suggestion needs to return to be indexed. Default value is 2.</comment>
+                            <comment>
+                                <![CDATA[
+                                The min number of results a query needs to return to be suggested. Default value is 2. <br /n>
+                                <span style="color: #D83900">&#9888;</span> Updating your suggested queries requires that you reindex your Algolia Search Suggestions index.
+                                ]]>
+                            </comment>
                         </min_number_of_results>
                     </fields>
                 </suggestions>
@@ -315,6 +366,12 @@
                     <show_in_website>1</show_in_website>
                     <show_in_store>1</show_in_store>
                     <expanded>1</expanded>
+                    <comment>
+                     <![CDATA[
+                     <font size="2"> Watch the <a href="https://youtu.be/DUuv9ALS5cM?t=911" target="_blank"><font color="#0066cc">Tutorial</font></a><br /n> 
+                    </font>
+                     ]]>
+                    </comment>
                     <fields>
                         <number_product_suggestions translate="label comment">
                             <label>Number of product suggestions</label>
@@ -324,13 +381,13 @@
                             <show_in_default>1</show_in_default>
                             <show_in_website>1</show_in_website>
                             <show_in_store>1</show_in_store>
-                            <comment>The number of product results displayed in the drop-down menu. Default value is 3.</comment>
+                            <comment>The number of product results displayed in the drop-down menu. Default value is 3. Set the value to 0 if you do not want to display the products section in the menu.</comment>
                         </number_product_suggestions>
                         <number_product_results translate="label comment">
                             <label>Number of products per page</label>
                             <frontend_type>text</frontend_type>
                             <validate>validate-digits</validate>
-                            <sort_order>20</sort_order>
+                            <sort_order>50</sort_order>
                             <show_in_default>1</show_in_default>
                             <show_in_website>1</show_in_website>
                             <show_in_store>1</show_in_store>
@@ -340,11 +397,11 @@
                             <label>Number of category suggestions</label>
                             <frontend_type>text</frontend_type>
                             <validate>validate-digits</validate>
-                            <sort_order>30</sort_order>
+                            <sort_order>20</sort_order>
                             <show_in_default>1</show_in_default>
                             <show_in_website>1</show_in_website>
                             <show_in_store>1</show_in_store>
-                            <comment>The number of category results displayed in the drop-down menu. Default value is 5.</comment>
+                            <comment>The number of category results displayed in the drop-down menu. Default value is 5. Set the value to 0 if you do not want to display the categories section in the menu.</comment>
                         </number_category_suggestions>
                         <number_page_suggestions translate="label comment">
                             <label>Number of page suggestions</label>
@@ -354,13 +411,13 @@
                             <show_in_default>1</show_in_default>
                             <show_in_website>1</show_in_website>
                             <show_in_store>1</show_in_store>
-                            <comment>The number of page suggestions displayed in the drop-down menu. Default value is 3.</comment>
+                            <comment>The number of page suggestions displayed in the drop-down menu. Default value is 3. Set the value to 0 if you do not want to display the pages section in the menu.</comment>
                         </number_page_suggestions>
                         <number_query_suggestions translate="label comment">
                             <label>Number of query suggestions</label>
                             <frontend_type>text</frontend_type>
                             <validate>validate-digits</validate>
-                            <sort_order>10</sort_order>
+                            <sort_order>30</sort_order>
                             <show_in_default>1</show_in_default>
                             <show_in_website>1</show_in_website>
                             <show_in_store>1</show_in_store>
@@ -370,7 +427,7 @@
                             <label>Number of values per facet</label>
                             <frontend_type>text</frontend_type>
                             <validate>validate-digits</validate>
-                            <sort_order>40</sort_order>
+                            <sort_order>60</sort_order>
                             <show_in_default>1</show_in_default>
                             <show_in_website>1</show_in_website>
                             <show_in_store>1</show_in_store>
@@ -380,7 +437,7 @@
                             <label>Remove branding logo</label>
                             <frontend_type>select</frontend_type>
                             <source_model>adminhtml/system_config_source_yesno</source_model>
-                            <sort_order>60</sort_order>
+                            <sort_order>70</sort_order>
                             <show_in_default>1</show_in_default>
                             <show_in_website>1</show_in_website>
                             <show_in_store>1</show_in_store>
@@ -390,7 +447,7 @@
                             <label>Add to Cart</label>
                             <frontend_type>select</frontend_type>
                             <source_model>adminhtml/system_config_source_yesno</source_model>
-                            <sort_order>70</sort_order>
+                            <sort_order>80</sort_order>
                             <show_in_default>1</show_in_default>
                             <show_in_website>1</show_in_website>
                             <show_in_store>1</show_in_store>
@@ -442,7 +499,6 @@
                             <show_in_website>1</show_in_website>
                             <show_in_store>1</show_in_store>
                             <comment>The max number of products by indexing job. Default value is 100.</comment>
-                            <depends><active>1</active></depends>
                         </number_of_element_by_page>
                         <number_of_job_to_run translate="label comment">
                             <label>Number of jobs to run each time the cron is run</label>

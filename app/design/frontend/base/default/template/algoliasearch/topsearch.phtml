@@ -34,7 +34,15 @@ if ($config->getNumberOfCategorySuggestions() > 0)
 if ($config->getNumberOfPageSuggestions() > 0)
     $types[] = $this->__('pages');
 
-$placeholder = 'Search for ' . implode(', ', array_slice($types, 0, count($types) - 1)) . ' or ' . $types[count($types) - 1];
+$or = count($types) > 1 ? ' or ' : '';
+
+$placeholder = 'Search';
+
+if (count($types) > 0)
+{
+    $placeholder = 'Search for ' . implode(', ', array_slice($types, 0, count($types) - 1)) . $or . $types[count($types) - 1];
+}
+
 $class = $isSearchPage ? 'search-page' : '';
 
 ?>
@@ -43,7 +51,7 @@ $class = $isSearchPage ? 'search-page' : '';
     <div id="algolia-searchbox" class="<?php echo $class; ?>">
         <label for="search"><?php echo $this->__('Search:') ?></label>
         <input id="search" type="text" name="<?php echo $catalogSearchHelper->getQueryParamName() ?>" class="input-text" autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off" placeholder="<?php echo $placeholder; ?>" />
-        <svg xmlns="http://www.w3.org/2000/svg" class="magnifying-glass" width="24" height="24" viewBox="0 0 128 128" >
+        <svg id="algolia-glass" xmlns="http://www.w3.org/2000/svg" class="magnifying-glass" width="24" height="24" viewBox="0 0 128 128" >
           <g transform="scale(4)">
             <path stroke-width="3" d="M19.5 19.582l9.438 9.438"></path>
             <circle stroke-width="3" cx="12" cy="12" r="10.5" fill="none"></circle>
@@ -165,6 +173,7 @@ $class = $isSearchPage ? 'search-page' : '';
 
         <div id="algolia-right-container">
 
+            {{#second_bar}}
             <div id="instant-search-bar-container">
                 <div id="instant-search-box">
                     <label for="instant-search-bar">
@@ -182,6 +191,7 @@ $class = $isSearchPage ? 'search-page' : '';
                     </svg>
                 </div>
             </div>
+            {{/second_bar}}
 
             <div id="instant-search-results-container"></div>
             <div id="instant-search-pagination-container"></div>
@@ -267,6 +277,7 @@ $class = $isSearchPage ? 'search-page' : '';
                         </div>
 
                         {{#isAddToCartEnabled}}
+                        {{#in_stock}}
                         <form action="/checkout/cart/add/product/{{objectID}}" method="post">
                             <input type="hidden" name="form_key" value="<?php echo $formKey; ?>" />
 
@@ -274,6 +285,7 @@ $class = $isSearchPage ? 'search-page' : '';
 
                             <button type="submit">Add to Cart</button>
                         </form>
+                        {{/in_stock}}
                         {{/isAddToCartEnabled}}
                     </div>
                 </div>
@@ -994,6 +1006,10 @@ $class = $isSearchPage ? 'search-page' : '';
                     window.location.href = item.url;
                 });
             });
+
+            $("#algolia-glass").click(function () {
+                $(this).closest('form').submit();
+            });
         }
 
         /*****************
@@ -1002,7 +1018,7 @@ $class = $isSearchPage ? 'search-page' : '';
          **
          *****************/
 
-        if (algoliaConfig.instant.enabled && <?php echo $isSearchPage ? "true" : "false"; ?>)
+        if (algoliaConfig.instant.enabled && (<?php echo $isSearchPage ? "true" : "false"; ?> || ! algoliaConfig.autocomplete.enabled))
         {
             if ($(algoliaConfig.instant.selector).length !== 1)
                 throw '[Algolia] Invalid instant-search selector: ' + algoliaConfig.instant.selector;
@@ -1010,6 +1026,8 @@ $class = $isSearchPage ? 'search-page' : '';
             if ($(algoliaConfig.instant.selector).find(algoliaConfig.autocomplete.selector).length > 0)
                 throw '[Algolia] You can\'t have a search input matching "' + algoliaConfig.autocomplete.selector +
                 '" inside you instant selector "' + algoliaConfig.instant.selector + '"';
+
+            var instant_selector = ! algoliaConfig.autocomplete.enabled ? "#search" : "#instant-search-bar";
 
             var wrapperTemplate     = algoliaBundle.Hogan.compile($('#instant_wrapper_template').html());
 
@@ -1031,7 +1049,7 @@ $class = $isSearchPage ? 'search-page' : '';
             {
                 if (initialized === false)
                 {
-                    $(algoliaConfig.instant.selector).html(wrapperTemplate.render()).show();
+                    $(algoliaConfig.instant.selector).html(wrapperTemplate.render({ second_bar: algoliaConfig.autocomplete.enabled })).show();
                     initialized = true;
                 }
                 /**
@@ -1092,7 +1110,7 @@ $class = $isSearchPage ? 'search-page' : '';
 
                 updateSliderValues();
 
-                var instant_search_bar = $('#instant-search-bar');
+                var instant_search_bar = $(instant_selector);
 
                 if (instant_search_bar.is(":focus") === false)
                 {
@@ -1255,7 +1273,7 @@ $class = $isSearchPage ? 'search-page' : '';
 
             /** Handle input clearing **/
             $('body').on('click', '.clear-button', function () {
-                $('#instant-search-bar').val('').focus();
+                $(instant_selector).val('').focus();
                 helper.clearRefinements().setQuery('');
 
                 performQueries(true);
@@ -1264,7 +1282,8 @@ $class = $isSearchPage ? 'search-page' : '';
             /**
              * Handle search
              */
-            $('body').on('keyup', '#instant-search-bar', function (e) {
+
+            $('body').on('keyup', instant_selector, function (e) {
                 e.preventDefault();
 
                 helper.setQuery($(this).val());
@@ -1317,7 +1336,9 @@ $class = $isSearchPage ? 'search-page' : '';
             /** Clean input **/
             $(algoliaConfig.autocomplete.selector).attr('autocomplete', 'off').attr('autocorrect', 'off').attr('spellcheck', 'false').attr('autocapitalize', 'off');
 
-            getRefinementsFromUrl();
+            if (<?php echo $isSearchPage ? "true" : "false"; ?> || location.hash.length > 1) {
+                getRefinementsFromUrl();
+            }
 
             window.addEventListener("popstate", function(e) {
                 getRefinementsFromUrl();
