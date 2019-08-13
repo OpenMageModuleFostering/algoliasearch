@@ -17,6 +17,8 @@ class Algolia_Algoliasearch_Helper_Config extends Mage_Core_Helper_Abstract
     const XML_PATH_FACETS                           = 'algoliasearch/instant/facets';
     const XML_PATH_SORTING_INDICES                  = 'algoliasearch/instant/sorts';
 
+    const XML_PATH_AUTOCOMPLETE_ADD_SECTIONS        = 'algoliasearch/autocomplete/additional_sections';
+
     const XML_PATH_PRODUCT_ATTRIBUTES               = 'algoliasearch/products/product_additional_attributes';
     const XML_PATH_PRODUCT_CUSTOM_RANKING           = 'algoliasearch/products/custom_ranking_product_attributes';
     const XML_PATH_RESULTS_LIMIT                    = 'algoliasearch/products/results_limit';
@@ -45,6 +47,35 @@ class Algolia_Algoliasearch_Helper_Config extends Mage_Core_Helper_Abstract
     const XML_PATH_IS_ACTIVE                        = 'algoliasearch/queue/active';
     const XML_PATH_NUMBER_OF_ELEMENT_BY_PAGE        = 'algoliasearch/queue/number_of_element_by_page';
     const XML_PATH_NUMBER_OF_JOB_TO_RUN             = 'algoliasearch/queue/number_of_job_to_run';
+    const XML_PATH_NO_PROCESS                       = 'algoliasearch/queue/noprocess';
+
+    const XML_PATH_PARTIAL_UPDATES                  = 'algoliasearch/advanced/partial_update';
+    const XML_PATH_CUSTOMER_GROUPS_ENABLE           = 'algoliasearch/advanced/customer_groups_enable';
+
+    public function noProcess($storeId = null)
+    {
+        return Mage::getStoreConfigFlag(self::XML_PATH_NO_PROCESS, $storeId);
+    }
+
+    public function isCustomerGroupsEnabled($storeId = null)
+    {
+        return Mage::getStoreConfigFlag(self::XML_PATH_CUSTOMER_GROUPS_ENABLE, $storeId);
+    }
+
+    public function isPartialUpdateEnabled($storeId = null)
+    {
+        return Mage::getStoreConfigFlag(self::XML_PATH_PARTIAL_UPDATES, $storeId);
+    }
+
+    public function getAutocompleteAdditionnalSections($storeId = null)
+    {
+        $attrs = unserialize(Mage::getStoreConfig(self::XML_PATH_AUTOCOMPLETE_ADD_SECTIONS, $storeId));
+
+        if (is_array($attrs))
+            return array_values($attrs);
+
+        return array();
+    }
 
     public function getNumberOfQuerySuggestions($storeId = null)
     {
@@ -167,8 +198,17 @@ class Algolia_Algoliasearch_Helper_Config extends Mage_Core_Helper_Abstract
 
         $attrs = unserialize(Mage::getStoreConfig(self::XML_PATH_SORTING_INDICES, $storeId));
 
+        $group_id = Mage::getSingleton('customer/session')->getCustomerGroupId();
+
+        $suffix_index_name = '';
+
+        if ($this->isCustomerGroupsEnabled($storeId))
+        {
+            $suffix_index_name = '_group_' . $group_id;
+        }
+
         foreach ($attrs as &$attr)
-            $attr['index_name'] = $product_helper->getIndexName($storeId).'_'.$attr['attribute'].'_'.$attr['sort'];
+            $attr['index_name'] = $product_helper->getIndexName($storeId).$suffix_index_name.'_'.$attr['attribute'].'_'.$attr['sort'];
 
         if (is_array($attrs))
             return $attrs;

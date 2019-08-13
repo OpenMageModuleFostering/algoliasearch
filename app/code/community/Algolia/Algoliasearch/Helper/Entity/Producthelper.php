@@ -11,7 +11,7 @@ class Algolia_Algoliasearch_Helper_Entity_Producthelper extends Algolia_Algolias
         return '_products';
     }
 
-    public function getAllAttributes()
+    public function getAllAttributes($add_empty_row = false)
     {
         if (is_null(self::$_productAttributes))
         {
@@ -36,13 +36,18 @@ class Algolia_Algoliasearch_Helper_Entity_Producthelper extends Algolia_Algolias
 
             foreach ($productAttributes as $attributeCode)
                 self::$_productAttributes[$attributeCode] = $config->getAttribute('catalog_category', $attributeCode)->getFrontendLabel();
-
-            uksort(self::$_productAttributes, function ($a, $b) {
-                return strcmp($a, $b);
-            });
         }
 
-        return self::$_productAttributes;
+        $attributes = self::$_productAttributes;
+
+        if ($add_empty_row === true)
+            $attributes[''] = '';
+
+        uksort($attributes, function ($a, $b) {
+            return strcmp($a, $b);
+        });
+
+        return $attributes;
     }
 
     protected function isAttributeEnabled($additionalAttributes, $attr_name)
@@ -96,11 +101,21 @@ class Algolia_Algoliasearch_Helper_Entity_Producthelper extends Algolia_Algolias
         return $products;
     }
 
-    public function getIndexSettings($storeId)
+    public function getIndexSettings($storeId, $group_id = null)
     {
         $attributesToIndex          = array();
         $unretrievableAttributes    = array();
         $attributesForFaceting      = array();
+
+        $suffix_index_name = '';
+
+        /**
+         * Handle grouping
+         */
+        if ($group_id !== null)
+        {
+            $suffix_index_name = '_group_'.$group_id;
+        }
 
         foreach ($this->config->getProductAdditionalAttributes($storeId) as $attribute)
         {
@@ -142,13 +157,11 @@ class Algolia_Algoliasearch_Helper_Entity_Producthelper extends Algolia_Algolias
         Mage::dispatchEvent('algolia_index_settings_prepare', array('store_id' => $storeId, 'index_settings' => $transport));
         $indexSettings = $transport->getData();
 
-        $mergeSettings = $this->algolia_helper->mergeSettings($this->getIndexName($storeId), $indexSettings);
+        $mergeSettings = $this->algolia_helper->mergeSettings($this->getIndexName($storeId).$suffix_index_name, $indexSettings);
 
         /**
          * Handle Slaves
          */
-
-
         $sorting_indices = $this->config->getSortingIndices();
 
         if (count($sorting_indices) > 0)
@@ -156,15 +169,15 @@ class Algolia_Algoliasearch_Helper_Entity_Producthelper extends Algolia_Algolias
             $slaves = array();
 
             foreach ($sorting_indices as $values)
-                $slaves[] = $this->getIndexName($storeId).'_'.$values['attribute'].'_'.$values['sort'];
+                $slaves[] = $this->getIndexName($storeId).$suffix_index_name.'_'.$values['attribute'].'_'.$values['sort'];
 
-            $this->algolia_helper->setSettings($this->getIndexName($storeId), array('slaves' => $slaves));
+            $this->algolia_helper->setSettings($this->getIndexName($storeId).$suffix_index_name, array('slaves' => $slaves));
 
             foreach ($sorting_indices as $values)
             {
                 $mergeSettings['ranking'] = array($values['sort'].'('.$values['attribute'].')', 'typo', 'geo', 'words', 'proximity', 'attribute', 'exact', 'custom');
 
-                $this->algolia_helper->setSettings($this->getIndexName($storeId).'_'.$values['attribute'].'_'.$values['sort'], $mergeSettings);
+                $this->algolia_helper->setSettings($this->getIndexName($storeId).$suffix_index_name.'_'.$values['attribute'].'_'.$values['sort'], $mergeSettings);
             }
         }
 
@@ -173,7 +186,7 @@ class Algolia_Algoliasearch_Helper_Entity_Producthelper extends Algolia_Algolias
         return $mergeSettings;
     }
 
-    public function getObject(Mage_Catalog_Model_Product $product)
+    public function getObject(Mage_Catalog_Model_Product $product, $group_id = null)
     {
         $defaultData    = array();
 
@@ -195,6 +208,22 @@ class Algolia_Algoliasearch_Helper_Entity_Producthelper extends Algolia_Algolias
         );
 
         $special_price = $product->getFinalPrice();
+
+        /**
+         * Handle group price
+         */
+        if ($group_id !== null)
+        {
+            $discounted_price = Mage::getResourceModel('catalogrule/rule')->getRulePrice(
+                Mage::app()->getLocale()->storeTimeStamp($product->getStoreId()),
+                Mage::app()->getStore($product->getStoreId())->getWebsiteId(),
+                $group_id,
+                $product->getId());
+
+            if ($discounted_price !== false)
+                $special_price = $discounted_price;
+        }
+
 
         if ($special_price != $customData['price'])
         {
@@ -246,10 +275,30 @@ class Algolia_Algoliasearch_Helper_Entity_Producthelper extends Algolia_Algolias
 
         $categories_with_path = array_intersect_key($categories_with_path, array_unique(array_map('serialize', $categories_with_path)));
 
+        $categories_hierarchical = array();
+
+        $level_name = 'level';
+
+        foreach ($categories_with_path as $category)
+        {
+            for ($i = 0; $i < count($category); $i++)
+            {
+                if (isset($categories_hierarchical[$level_name.$i]) === false)
+                    $categories_hierarchical[$level_name.$i] = array();
+
+                $categories_hierarchical[$level_name.$i][] = implode(' /// ', array_slice($category, 0, $i + 1));
+            }
+        }
+
+        foreach ($categories_hierarchical as &$level)
+        {
+            $level = array_unique($level);
+        }
+
         foreach ($categories_with_path as &$category)
             $category = implode(' /// ',$category);
 
-        $customData['categories'] = array_values($categories_with_path);
+        $customData['categories'] = $categories_hierarchical;//array_values($categories_with_path);
 
         $customData['categories_without_path'] = $categories;
 
@@ -310,7 +359,6 @@ class Algolia_Algoliasearch_Helper_Entity_Producthelper extends Algolia_Algolias
             $customData['max_formated'] = Mage::helper('core')->formatPrice($max, false);
             $customData['min_with_tax_formated'] = Mage::helper('core')->formatPrice($min_with_tax, false);
             $customData['max_with_tax_formated'] = Mage::helper('core')->formatPrice($max_with_tax, false);
-
         }
 
         if (false === isset($defaultData['in_stock']))
@@ -378,6 +426,8 @@ class Algolia_Algoliasearch_Helper_Entity_Producthelper extends Algolia_Algolias
 
             if ($attribute_ressource)
             {
+                $attribute_ressource = $attribute_ressource->setStoreId($product->getStoreId());
+
                 if ($value === null)
                 {
                     /** Get values as array in children */
@@ -415,7 +465,10 @@ class Algolia_Algoliasearch_Helper_Entity_Producthelper extends Algolia_Algolias
                     if ($value_text)
                         $value = $value_text;
                     else
+                    {
+                        $attribute_ressource = $attribute_ressource->setStoreId($product->getStoreId());
                         $value = $attribute_ressource->getFrontend()->getValue($product);
+                    }
 
                     if ($value)
                     {

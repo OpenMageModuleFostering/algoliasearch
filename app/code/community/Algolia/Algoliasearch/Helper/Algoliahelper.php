@@ -2,28 +2,28 @@
 
 if (class_exists('AlgoliaSearch\Client', false) == false)
 {
-    require_once 'AlgoliaSearch/Version.php';
-    require_once 'AlgoliaSearch/AlgoliaException.php';
-    require_once 'AlgoliaSearch/ClientContext.php';
-    require_once 'AlgoliaSearch/Client.php';
-    require_once 'AlgoliaSearch/Index.php';
+    require_once Mage::getBaseDir('lib').'/AlgoliaSearch/Version.php';
+    require_once Mage::getBaseDir('lib').'/AlgoliaSearch/AlgoliaException.php';
+    require_once Mage::getBaseDir('lib').'/AlgoliaSearch/ClientContext.php';
+    require_once Mage::getBaseDir('lib').'/AlgoliaSearch/Client.php';
+    require_once Mage::getBaseDir('lib').'/AlgoliaSearch/Index.php';
 }
 
 class Algolia_Algoliasearch_Helper_Algoliahelper extends Mage_Core_Helper_Abstract
 {
     protected $client;
+    private $config;
 
     public function __construct()
     {
+        $this->config = Mage::helper('algoliasearch/config');
         $this->resetCredentialsFromConfig();
     }
 
     public function resetCredentialsFromConfig()
     {
-        $config = Mage::helper('algoliasearch/config');
-
-        if ($config->getApplicationID() && $config->getAPIKey())
-            $this->client = new \AlgoliaSearch\Client($config->getApplicationID(), $config->getAPIKey());
+        if ($this->config->getApplicationID() && $this->config->getAPIKey())
+            $this->client = new \AlgoliaSearch\Client($this->config->getApplicationID(), $this->config->getAPIKey());
     }
 
     public function getIndex($name)
@@ -89,10 +89,58 @@ class Algolia_Algoliasearch_Helper_Algoliahelper extends Mage_Core_Helper_Abstra
         return $onlineSettings;
     }
 
+    public function handleTooBigRecords(&$objects, $index_name)
+    {
+        $long_attributes = array('description', 'short_description', 'meta_description', 'content');
+
+        $good_size = true;
+
+        $ids = array();
+
+        foreach ($objects as $key => &$object)
+        {
+            $size = mb_strlen(json_encode($object));
+
+            if ($size > 20000)
+            {
+                foreach ($long_attributes as $attribute)
+                {
+                    if (isset($object[$attribute]))
+                    {
+                        unset($object[$attribute]);
+                        $ids[$index_name.' objectID('.$object['objectID'].')'] = true;
+                        $good_size = false;
+                    }
+
+                }
+
+                $size = mb_strlen(json_encode($object));
+
+                if ($size > 20000)
+                {
+                    unset($objects[$key]);
+                }
+            }
+        }
+
+        if (count($objects) <= 0)
+            return;
+
+        if ($good_size === false)
+        {
+            Mage::getSingleton('adminhtml/session')->addError('Algolia reindexing : You have some records ('.implode(',', array_keys($ids)).') that are too big. They have either been truncated or skipped');
+        }
+    }
+
     public function addObjects($objects, $index_name)
     {
+        $this->handleTooBigRecords($objects, $index_name);
+
         $index = $this->getIndex($index_name);
 
-        $index->addObjects($objects);
+        if ($this->config->isPartialUpdateEnabled())
+            $index->partialUpdateObjects($objects);
+        else
+            $index->addObjects($objects);
     }
 }

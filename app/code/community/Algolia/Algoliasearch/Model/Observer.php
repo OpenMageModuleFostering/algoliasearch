@@ -45,25 +45,53 @@ class Algolia_Algoliasearch_Model_Observer
         return $this;
     }
 
+    public function saveProduct(Varien_Event_Observer $observer)
+    {
+        $product = $observer->getDataObject();
+        $product = Mage::getModel('catalog/product')->load($product->getId());
+
+        Algolia_Algoliasearch_Model_Indexer_Algolia::$product_categories[$product->getId()] = $product->getCategoryIds();
+    }
+
+    private function updateStock($product_id)
+    {
+        foreach (Mage::app()->getStores() as $storeId => $store)
+        {
+            if ( ! $store->getIsActive())
+                continue;
+
+            $this->helper->rebuildStoreProductIndex($storeId, array($product_id));
+        }
+    }
+
+    public function catalogInventorySave(Varien_Event_Observer $observer)
+    {
+        $product = $observer->getItem();
+
+        $this->updateStock($product->getProductId());
+    }
+
+    public function quoteInventory(Varien_Event_Observer $observer)
+    {
+        $quote = $observer->getEvent()->getQuote();
+
+        foreach ($quote->getAllItems() as $product)
+            $this->updateStock($product->getProductId());
+    }
+
+    public function refundOrderInventory(Varien_Event_Observer $observer)
+    {
+        $creditmemo = $observer->getEvent()->getCreditmemo();
+
+        foreach ($creditmemo->getAllItems() as $product)
+            $this->updateStock($product->getProductId());
+    }
+
     public function deleteProductsAndCategoriesStoreIndices(Varien_Object $event)
     {
         $storeId = $event->getStoreId();
 
         $this->helper->deleteProductsAndCategoriesStoreIndices($storeId);
-    }
-
-    public function deletePagesStoreIndices(Varien_Object $event)
-    {
-        $storeId = $event->getStoreId();
-
-        $this->helper->deletePagesStoreIndices($storeId);
-    }
-
-    public function deleteSuggestionsStoreIndices(Varien_Object $event)
-    {
-        $storeId = $event->getStoreId();
-
-        $this->helper->deleteSuggestionsStoreIndices($storeId);
     }
 
     public function removeProducts(Varien_Object $event)
@@ -80,6 +108,13 @@ class Algolia_Algoliasearch_Model_Observer
         $category_ids = $event->getCategoryIds();
 
         $this->helper->removeCategories($category_ids, $storeId);
+    }
+
+    public function rebuildAdditionalSectionsIndex(Varien_Object $event)
+    {
+        $storeId = $event->getStoreId();
+
+        $this->helper->rebuildStoreAdditionalSectionsIndex($storeId);
     }
 
     public function rebuildPageIndex(Varien_Object $event)
@@ -174,41 +209,5 @@ class Algolia_Algoliasearch_Model_Observer
         }
 
         return $this;
-    }
-
-    /**
-     * Catch request if it is a category page
-     */
-    public function controllerFrontInitBefore(Varien_Event_Observer $observer)
-    {
-        if ($this->config->replaceCategories() == false)
-            return;
-        if ($this->config->isInstantEnabled() == false)
-            return;
-
-        if (Mage::app()->getRequest()->getControllerName() == 'category' && Mage::app()->getRequest()->getParam('category') == null)
-        {
-            $category = Mage::registry('current_category');
-
-            $category->getUrlInstance()->setStore(Mage::app()->getStore()->getStoreId());
-
-            $path = '';
-
-            foreach ($category->getPathIds() as $treeCategoryId) {
-                if ($path != '') {
-                    $path .= ' /// ';
-                }
-
-                $path .= $this->product_helper->getCategoryName($treeCategoryId, Mage::app()->getStore()->getStoreId());
-            }
-
-            $indexName = $this->product_helper->getIndexName(Mage::app()->getStore()->getStoreId());
-
-            $url = Mage::app()->getRequest()->getOriginalPathInfo().'?category=1#q=&page=0&refinements=%5B%7B%22categories%22%3A%5B%22'.$path.'%22%5D%7D%5D&numerics_refinements=%7B%7D&index_name=%22'.$indexName.'%22';
-
-            header('Location: '.$url);
-
-            die();
-        }
     }
 }
