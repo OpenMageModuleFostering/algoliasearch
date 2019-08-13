@@ -18,7 +18,10 @@ class Algolia_Algoliasearch_Helper_Algoliahelper extends Mage_Core_Helper_Abstra
         $this->resetCredentialsFromConfig();
 
         $version = $this->config->getExtensionVersion();
-        \AlgoliaSearch\Version::$custom_value = '; Magento integration '.$version.'; PHP '.phpversion().'; Magento '.Mage::getVersion();
+
+        \AlgoliaSearch\Version::addPrefixUserAgentSegment('Magento integration', $version);
+        \AlgoliaSearch\Version::addSuffixUserAgentSegment('PHP', phpversion());
+        \AlgoliaSearch\Version::addSuffixUserAgentSegment('Magento', Mage::getVersion());
     }
 
     public function resetCredentialsFromConfig()
@@ -28,7 +31,7 @@ class Algolia_Algoliasearch_Helper_Algoliahelper extends Mage_Core_Helper_Abstra
         }
     }
 
-    public function generateSearchSecuredApiKey($key, $params = [])
+    public function generateSearchSecuredApiKey($key, $params = array())
     {
         return $this->client->generateSecuredApiKey($key, $params);
     }
@@ -74,14 +77,14 @@ class Algolia_Algoliasearch_Helper_Algoliahelper extends Mage_Core_Helper_Abstra
 
     public function mergeSettings($index_name, $settings)
     {
-        $onlineSettings = [];
+        $onlineSettings = array();
 
         try {
             $onlineSettings = $this->getIndex($index_name)->getSettings();
         } catch (\Exception $e) {
         }
 
-        $removes = ['slaves'];
+        $removes = array('slaves');
 
         foreach ($removes as $remove) {
             if (isset($onlineSettings[$remove])) {
@@ -98,11 +101,11 @@ class Algolia_Algoliasearch_Helper_Algoliahelper extends Mage_Core_Helper_Abstra
 
     public function handleTooBigRecords(&$objects, $index_name)
     {
-        $long_attributes = ['description', 'short_description', 'meta_description', 'content'];
+        $long_attributes = array('description', 'short_description', 'meta_description', 'content');
 
         $good_size = true;
 
-        $ids = [];
+        $ids = array();
 
         foreach ($objects as $key => &$object) {
             $size = mb_strlen(json_encode($object));
@@ -154,14 +157,14 @@ class Algolia_Algoliasearch_Helper_Algoliahelper extends Mage_Core_Helper_Abstra
     {
         $index = $this->getIndex($index_name);
 
-        /**
+        /*
          * Placeholders and alternative corrections are handled directly in Algolia dashboard.
          * To keep it works, we need to merge it before setting synonyms to Algolia indices.
          */
         $hitsPerPage = 100;
         $page = 0;
         do {
-            $complexSynonyms = $index->searchSynonyms('', ['altCorrection1', 'altCorrection2', 'placeholder'], $page, $hitsPerPage);
+            $complexSynonyms = $index->searchSynonyms('', array('altCorrection1', 'altCorrection2', 'placeholder'), $page, $hitsPerPage);
             foreach ($complexSynonyms['hits'] as $hit) {
                 unset($hit['_highlightResult']);
 
@@ -173,6 +176,7 @@ class Algolia_Algoliasearch_Helper_Algoliahelper extends Mage_Core_Helper_Abstra
 
         if (empty($synonyms)) {
             $index->clearSynonyms(true);
+
             return;
         }
 
