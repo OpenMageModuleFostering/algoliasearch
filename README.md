@@ -1,3 +1,5 @@
+
+
 ## Original Package Description
 
 This module let you easily integrate the Algolia Search API to your Magento instance.
