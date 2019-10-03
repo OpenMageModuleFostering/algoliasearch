@@ -1,16 +1,19 @@
 {
-    "name": "OpenMageModuleFostering/algoliasearch",
+    "name": "OpenMageModuleFostering\/algoliasearch",
     "type": "magento-module",
     "license": "MIT",
     "homepage": "",
     "description": "This module let you easily integrate the Algolia Search API to your Magento instance.",
     "authors": [
-    {
-        "name": "Algolia Team",
-        "email": "support@algolia.com"
-    }
-],
+        {
+            "name": "Algolia Team",
+            "email": "support@algolia.com"
+        }
+    ],
     "suggest": {
-        "magento-hackathon/magento-composer-installer": "*"
-    }
+        "magento-hackathon\/magento-composer-installer": "*"
+    },
+    "keywords": [
+        "openmage-module"
+    ]
 }
